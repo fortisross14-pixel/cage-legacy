@@ -1,0 +1,101 @@
+/* ============================================================
+ * CAGE LEGACY — DESIGN TOKENS
+ * ============================================================
+ * All theming lives here. Components reference these via var(--...).
+ * Adjust this file to retheme the app without touching components.
+ * ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* --- TYPOGRAPHY ---------------------------------------- */
+  --font-display: 'Oswald', 'Arial Narrow', sans-serif;       /* Section headers, big titles */
+  --font-stat:    'Barlow Condensed', 'Oswald', sans-serif;   /* Numbers, stats, badges */
+  --font-body:    'Inter', system-ui, sans-serif;             /* Body, small UI */
+
+  /* --- COLORS: BASE -------------------------------------- */
+  --bg-deep:    #05070d;                  /* Deepest layer */
+  --bg-base:    #0a0e1a;                  /* Main app background */
+  --bg-panel:   #11162a;                  /* Cards, panels */
+  --bg-elev:    #181f38;                  /* Elevated surfaces, hover */
+  --bg-elev-2:  #232b48;                  /* Highest panels, inputs */
+
+  --border:        rgba(255, 255, 255, 0.08);
+  --border-bright: rgba(255, 255, 255, 0.16);
+
+  /* --- COLORS: TEXT -------------------------------------- */
+  --text:        #e8ecf5;
+  --text-bright: #ffffff;
+  --text-dim:    #8893a8;
+  --text-faint:  #4a5266;
+
+  /* --- COLORS: ACCENTS (the EA UFC signature palette) ---- */
+  --gold:        #d4af37;
+  --gold-bright: #f5d572;
+  --gold-deep:   #8a6f1e;
+
+  --red:         #dc2626;
+  --red-bright:  #ef4444;
+  --red-deep:    #7f1d1d;
+
+  --cyan:        #22d3ee;
+  --cyan-bright: #67e8f9;
+  --cyan-deep:   #0891b2;
+
+  --green:       #10b981;
+  --orange:      #f97316;
+  --purple:      #a855f7;
+
+  /* --- DIVISION COLORS ----------------------------------- */
+  --div-lw:  #38bdf8;   /* Lightweight — sky blue */
+  --div-ww:  #10b981;   /* Welterweight — emerald */
+  --div-lhw: #f97316;   /* Light heavy — orange */
+  --div-hw:  #dc2626;   /* Heavyweight — red */
+
+  /* --- RARITY COLORS ------------------------------------- */
+  --rare-common:    #94a3b8;
+  --rare-uncommon:  #4ade80;
+  --rare-rare:      #60a5fa;
+  --rare-epic:      #a855f7;
+  --rare-legendary: #f59e0b;
+
+  /* --- METHOD COLORS ------------------------------------- */
+  --method-ko:  var(--red);
+  --method-sub: var(--purple);
+  --method-dec: var(--cyan);
+  --method-doc: var(--orange);
+
+  /* --- GRADIENTS ----------------------------------------- */
+  --grad-gold:   linear-gradient(135deg, var(--gold-bright) 0%, var(--gold) 50%, var(--gold-deep) 100%);
+  --grad-red:    linear-gradient(135deg, var(--red-bright) 0%, var(--red) 50%, var(--red-deep) 100%);
+  --grad-panel:  linear-gradient(180deg, var(--bg-panel) 0%, var(--bg-base) 100%);
+  --grad-hero:   radial-gradient(ellipse at 70% 50%, rgba(212, 175, 55, 0.12), transparent 60%),
+                 linear-gradient(180deg, var(--bg-panel) 0%, var(--bg-base) 100%);
+  --grad-hero-red: radial-gradient(ellipse at 70% 50%, rgba(220, 38, 38, 0.15), transparent 60%),
+                   linear-gradient(180deg, var(--bg-panel) 0%, var(--bg-base) 100%);
+
+  /* --- SHADOWS ------------------------------------------- */
+  --shadow-gold: 0 0 30px rgba(212, 175, 55, 0.25);
+  --shadow-red:  0 0 30px rgba(220, 38, 38, 0.25);
+  --shadow-cyan: 0 0 24px rgba(34, 211, 238, 0.3);
+  --shadow-deep: 0 8px 32px rgba(0, 0, 0, 0.6);
+
+  /* --- LETTER SPACING (the "broadcast" feel) ------------- */
+  --tracking-tight:  -0.01em;
+  --tracking-normal:  0;
+  --tracking-wide:    0.05em;
+  --tracking-wider:   0.1em;
+  --tracking-widest:  0.2em;
+
+  /* --- RADII --------------------------------------------- */
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 20px;
+
+  /* --- TIMING -------------------------------------------- */
+  --t-fast:   120ms;
+  --t-base:   200ms;
+  --t-slow:   400ms;
+  --ease:     cubic-bezier(0.16, 1, 0.3, 1);
+}
