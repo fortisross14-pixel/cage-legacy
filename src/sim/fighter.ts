@@ -76,7 +76,7 @@ export function generateFighter(opts: GenerateOptions): Fighter {
     lastName: pick(LAST_NAMES),
     nickname: chance(0.75) ? pick(NICKNAMES) : null,
     country: country.name,
-    flag: country.flag,
+    countryCode: country.code,
     age,
     debutAge: age,
     rarity,
@@ -105,6 +105,9 @@ export function generateFighter(opts: GenerateOptions): Fighter {
     retiredAtEvent: null,
     hallOfFame: false,
     inactive: 0,
+    injured: 0,
+    fame: 0,
+    careerPoints: 0,
     fightLog: [],
   };
 }

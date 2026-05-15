@@ -1,14 +1,12 @@
 import type {
-  CardFight,
   Division,
   EventData,
   EventFight,
-  Fighter,
   GameState,
 } from '@/types';
 import { CITIES, DIVISION_KEYS, DIVISIONS, EVENT_PREFIXES } from '@/data';
 import { ageFighter, evaluateHallOfFame, fullName, generateFighter } from './fighter';
-import { applyResult, simulateFight } from './fight';
+import { applyResult, applyPostFightEffects, simulateFight } from './fight';
 import {
   buildEventArchiveEntry,
   buildEventCard,
@@ -16,6 +14,13 @@ import {
   handleChampionRetirements,
   handleTitleResult,
 } from './rankings';
+import { applyAgeFameDecay } from './fame';
+import { priorMeetingsCount } from './rivalry';
+import {
+  rollPreEventInjury,
+  rollPostFightEvents,
+  rollRosterTickEvents,
+} from './randomEvents';
 import { pick, randInt } from './random';
 
 const ROSTER_PER_DIVISION = 24;
@@ -29,23 +34,44 @@ export function runEvent(state: GameState): EventData {
   state.eventCount++;
   const num = state.eventCount;
 
+  // === INJURY COUNTDOWN ===
+  // Decrement everyone's injury timer at the START of the event.
+  for (const f of state.fighters) {
+    if (f.injured > 0) f.injured = Math.max(0, f.injured - 1);
+  }
+
   const eventName = `CL ${num}: ${pick(EVENT_PREFIXES)}`;
   const city = pick(CITIES);
   const date = computeDate(num);
   const eventInfo = { num, name: eventName };
 
-  // Build card
+  // Build card (rivalry- + injury-aware)
   const card = buildEventCard(state);
 
-  // Hydrate fights with full fighter refs and run them
+  // === PRE-EVENT RANDOM EVENTS: injuries / pullouts ===
+  rollPreEventInjury(state, card, num);
+
+  // Hydrate fights and run them
   const fights: EventFight[] = card.map((cardFight) => {
     const fA = state.fighters.find((f) => f.id === cardFight.fAId)!;
     const fB = state.fighters.find((f) => f.id === cardFight.fBId)!;
+    const priorMeetings = priorMeetingsCount(state, fA.id, fB.id);
+
     const result = simulateFight(fA, fB, {
       isTitleFight: cardFight.isTitleFight,
       isMainEvent: cardFight.isMainEvent,
+      priorMeetings,
     });
-    applyResult(fA, fB, result, eventInfo);
+
+    const { winner, loser } = applyResult({
+      state,
+      fA,
+      fB,
+      result,
+      isMainEvent: cardFight.isMainEvent,
+      eventInfo,
+    });
+
     if (cardFight.isTitleFight) {
       handleTitleResult({
         state,
@@ -55,18 +81,57 @@ export function runEvent(state: GameState): EventData {
         division: cardFight.division,
       });
     }
-    return { fA, fB, isTitleFight: cardFight.isTitleFight, isMainEvent: cardFight.isMainEvent, division: cardFight.division, result };
+
+    // Fame + rivalry + best-fights AFTER title handling (so champion status is final)
+    applyPostFightEffects({
+      state,
+      winner,
+      loser,
+      fA,
+      fB,
+      result,
+      isMainEvent: cardFight.isMainEvent,
+      eventInfo,
+      division: cardFight.division,
+    });
+
+    // === POST-FIGHT RANDOM EVENTS ===
+    rollPostFightEvents({
+      state,
+      fA,
+      fB,
+      result,
+      isMainEvent: cardFight.isMainEvent,
+      isTitleFight: cardFight.isTitleFight,
+      eventNum: num,
+    });
+
+    return {
+      fA,
+      fB,
+      isTitleFight: cardFight.isTitleFight,
+      isMainEvent: cardFight.isMainEvent,
+      division: cardFight.division,
+      isRivalry: cardFight.isRivalry,
+      priorMeetings,
+      result,
+    };
   });
 
-  // Headline
+  // Headline picks the highest-rated fight as the story
   const headline = generateHeadline(fights, state);
 
-  // Age fighters periodically
+  // === ROSTER-TICK RANDOM EVENTS: title strips, comebacks ===
+  rollRosterTickEvents(state, num);
+
+  // Periodic aging
   if (num % AGE_EVERY_N_EVENTS === 0) {
     state.fighters.forEach((f) => {
-      if (!f.retired) ageFighter(f, num);
+      if (!f.retired) {
+        ageFighter(f, num);
+        applyAgeFameDecay(f, DIVISIONS[f.division].primeMax);
+      }
     });
-    // After aging, some fighters may have retired
     handleChampionRetirements(state);
     state.fighters.forEach((f) => {
       if (f.retired && !f.hallOfFame && evaluateHallOfFame(f)) {
@@ -75,11 +140,11 @@ export function runEvent(state: GameState): EventData {
     });
   }
 
-  // Replenish each division roster
+  // Replenish
   replenishRoster(state);
 
-  // Archive
-  const archiveEntry = buildEventArchiveEntry(state, num, eventName, city, date);
+  // Archive (now includes per-fight snapshot + headline)
+  const archiveEntry = buildEventArchiveEntry(state, num, eventName, city, date, fights, headline);
   state.eventArchive.push(archiveEntry);
   if (state.eventArchive.length > 200) state.eventArchive.shift();
 
@@ -89,7 +154,7 @@ export function runEvent(state: GameState): EventData {
 }
 
 // ============================================================
-// ROSTER REPLENISHMENT — per division
+// ROSTER
 // ============================================================
 
 export function seedInitialRoster(state: GameState): void {
@@ -98,7 +163,6 @@ export function seedInitialRoster(state: GameState): void {
     for (let i = 0; i < ROSTER_PER_DIVISION; i++) {
       state.fighters.push(generateFighter({ division }));
     }
-    // Guarantee at least one epic+ per division so a champ emerges quickly
     const elites = state.fighters.filter(
       (f) => f.division === division && (f.rarity === 'epic' || f.rarity === 'legendary')
     );
@@ -133,31 +197,41 @@ function replenishRoster(state: GameState): void {
 }
 
 // ============================================================
-// DATE COMPUTATION
+// DATE
 // ============================================================
 
 function computeDate(eventNum: number): string {
-  // Universe starts Jan 1 2025, events roughly every 3 weeks
   const date = new Date(2025, 0, 1);
   date.setDate(date.getDate() + eventNum * 21);
   return date.toISOString();
 }
 
 // ============================================================
-// HEADLINE GENERATION
+// HEADLINE GENERATION — now rating-aware
 // ============================================================
 
 function generateHeadline(fights: EventFight[], state: GameState): string | null {
-  // Prefer a title fight headline
-  const titleFight = fights.find((f) => f.isTitleFight) ?? fights[0];
-  if (!titleFight) return null;
+  if (fights.length === 0) return null;
 
-  const winner = titleFight.result.winnerId === titleFight.fA.id ? titleFight.fA : titleFight.fB;
-  const loser = titleFight.result.winnerId === titleFight.fA.id ? titleFight.fB : titleFight.fA;
-  const divLabel = DIVISIONS[titleFight.division].label;
-  const methodLabel = methodHeadline(titleFight.result.method);
+  // Prefer (1) title fight, (2) highest-rated fight if rating >= 7.0
+  const titleFight = fights.find((f) => f.isTitleFight);
+  const topRated = [...fights].sort((a, b) => b.result.rating - a.result.rating)[0];
 
-  if (titleFight.isTitleFight) {
+  // Trilogy / rivalry headline takes priority if rating is high
+  if (topRated && topRated.priorMeetings >= 1 && topRated.result.rating >= 7.0) {
+    return rivalryHeadline(topRated);
+  }
+
+  // Otherwise: title fight if present
+  const focus = titleFight ?? topRated;
+  if (!focus) return null;
+
+  const winner = focus.result.winnerId === focus.fA.id ? focus.fA : focus.fB;
+  const loser = focus.result.winnerId === focus.fA.id ? focus.fB : focus.fA;
+  const divLabel = DIVISIONS[focus.division].label;
+  const methodLabel = methodHeadline(focus.result.method);
+
+  if (focus.isTitleFight) {
     const wasChamp =
       loser.titleReigns > 0 &&
       state.titleHistory.some(
@@ -175,14 +249,37 @@ function generateHeadline(fights: EventFight[], state: GameState): string | null
     return `${fullName(winner)} claims the vacant ${divLabel} title with a ${methodLabel} victory.`;
   }
 
-  // Non-title interesting storyline
+  if (focus.result.rating >= 8.5) {
+    return `Instant classic — ${fullName(winner)} downs ${fullName(loser)} in a ${focus.result.rating.toFixed(2)}-rated war.`;
+  }
   if (winner.currentStreak >= 5) {
     return `${fullName(winner)} wins his ${winner.currentStreak}th in a row at ${divLabel} — title contention beckons.`;
   }
-  if (titleFight.result.method === 'KO' && titleFight.result.round === 1) {
+  if (focus.result.method === 'KO' && focus.result.round === 1) {
     return `Stunning first-round KO: ${fullName(winner)} ends it early on ${fullName(loser)}.`;
   }
   return `${fullName(winner)} defeats ${fullName(loser)} in the ${divLabel} main event.`;
+}
+
+function rivalryHeadline(fight: EventFight): string {
+  const winner = fight.result.winnerId === fight.fA.id ? fight.fA : fight.fB;
+  const loser = fight.result.winnerId === fight.fA.id ? fight.fB : fight.fA;
+  const meetingNum = fight.priorMeetings + 1;
+  const label =
+    meetingNum === 2 ? 'in a rematch' :
+    meetingNum === 3 ? 'in their trilogy bout' :
+    `in their ${ordinal(meetingNum)} meeting`;
+  return `${fullName(winner)} beats ${fullName(loser)} ${label} — ${fight.result.rating.toFixed(2)} rating.`;
+}
+
+function ordinal(n: number): string {
+  if (n % 100 >= 11 && n % 100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
+  }
 }
 
 function methodHeadline(method: string): string {

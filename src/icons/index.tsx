@@ -21,6 +21,7 @@ import {
   Target,
   Activity,
   TrendingUp,
+  TrendingDown,
   Calendar,
   Users,
   History,
@@ -50,6 +51,14 @@ import {
   Sword,
   Clock,
   MapPin,
+  Newspaper,
+  Bandage,
+  UserMinus,
+  UserPlus,
+  Megaphone,
+  Sparkles,
+  ShieldOff,
+  Archive,
   type LucideProps,
 } from 'lucide-react';
 
@@ -104,6 +113,17 @@ export const ICONS = {
   reset: RotateCcw,
   arrowRight: ArrowRight,
   arrowLeft: ArrowLeft,
+
+  // News / narrative events
+  news: Newspaper,
+  injury: Bandage,
+  retire: UserMinus,
+  comeback: UserPlus,
+  callOut: Megaphone,
+  hype: Sparkles,
+  titleStrip: ShieldOff,
+  archive: Archive,
+  trendDown: TrendingDown,
 } as const;
 
 export type IconName = keyof typeof ICONS;

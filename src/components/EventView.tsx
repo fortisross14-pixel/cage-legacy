@@ -1,7 +1,8 @@
-import type { EventData, Fighter } from '@/types';
+import type { EventData, EventFight, Fighter } from '@/types';
 import { DIVISIONS } from '@/data';
 import { fullName, recordStr } from '@/sim/fighter';
 import { Icon } from '@/icons';
+import { Flag } from './Flag';
 import { METHOD_LABELS, METHOD_ICONS } from './methodLabels';
 
 interface Props {
@@ -47,9 +48,9 @@ export function EventView({ eventData, onSimulate, onFighterClick }: Props) {
           </div>
         </div>
       ) : (
-        <div className="event-card">
+        <>
           {eventData.headline && (
-            <div className="headline-banner">
+            <div className="headline-banner standalone">
               <div className="headline-icon">
                 <Icon name="star" size={18} />
               </div>
@@ -60,79 +61,115 @@ export function EventView({ eventData, onSimulate, onFighterClick }: Props) {
             </div>
           )}
 
-          {eventData.fights.map((fight, idx) => {
-            const fAIsWinner = fight.result.winnerId === fight.fA.id;
-            const classes = ['fight-row'];
-            if (fight.isMainEvent) classes.push('main-event');
-
-            return (
-              <div className={classes.join(' ')} data-div={fight.division} key={idx}>
-                {(fight.isTitleFight || fight.isMainEvent) && (
-                  <div className="fight-banner">
-                    <span className={fight.isTitleFight ? 'title-tag' : 'main-event-tag'}>
-                      {fight.isTitleFight ? (
-                        <>
-                          <Icon name="champion" size={12} />
-                          {DIVISIONS[fight.division].label} Title
-                        </>
-                      ) : (
-                        <>Main Event</>
-                      )}
-                    </span>
-                    <span className="div-tag">{DIVISIONS[fight.division].shortLabel}</span>
-                  </div>
-                )}
-                {!fight.isTitleFight && !fight.isMainEvent && (
-                  <div className="fight-banner">
-                    <span />
-                    <span className="div-tag">{DIVISIONS[fight.division].shortLabel}</span>
-                  </div>
-                )}
-                <FighterBlock fighter={fight.fA} isWinner={fAIsWinner} side="left" onClick={onFighterClick} />
-                <div className="vs-block">
-                  <div className={`vs-method method-${fight.result.method}`}>
-                    <Icon name={METHOD_ICONS[fight.result.method]} size={12} />
-                    {METHOD_LABELS[fight.result.method]}
-                  </div>
-                  <div className="vs-round">
-                    {fight.result.method === 'DEC'
-                      ? `After ${fight.result.round} rounds`
-                      : `Round ${fight.result.round}`}
-                  </div>
-                </div>
-                <FighterBlock fighter={fight.fB} isWinner={!fAIsWinner} side="right" onClick={onFighterClick} />
-              </div>
-            );
-          })}
-        </div>
+          <div className="fight-list">
+            {eventData.fights.map((fight, idx) => (
+              <FightRow key={idx} fight={fight} onFighterClick={onFighterClick} />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
 }
 
-interface FighterBlockProps {
+// ============================================================
+// COMPACT FIGHT ROW
+// ============================================================
+function FightRow({ fight, onFighterClick }: { fight: EventFight; onFighterClick: (id: string) => void }) {
+  const fAIsWinner = fight.result.winnerId === fight.fA.id;
+  const classes = ['fight-row-compact'];
+  if (fight.isMainEvent) classes.push('main-event');
+  if (fight.isTitleFight) classes.push('title');
+
+  // Significance tags row
+  const tags: { label: string; cls: string; icon?: React.ReactNode }[] = [];
+  if (fight.isTitleFight) {
+    tags.push({
+      label: `${DIVISIONS[fight.division].label} Title`,
+      cls: 'tag-title',
+      icon: <Icon name="champion" size={11} />,
+    });
+  } else if (fight.isMainEvent) {
+    tags.push({ label: 'Main Event', cls: 'tag-main' });
+  }
+  if (fight.priorMeetings >= 1) {
+    const word = fight.priorMeetings === 1 ? 'Rematch' : fight.priorMeetings === 2 ? 'Trilogy' : `Meeting ${fight.priorMeetings + 1}`;
+    tags.push({ label: word, cls: 'tag-rivalry', icon: <Icon name="fight" size={11} /> });
+  }
+
+  return (
+    <div className={classes.join(' ')} data-div={fight.division}>
+      <div className="frc-top">
+        <div className="frc-tags">
+          {tags.length === 0 ? (
+            <span className="tag-div">{DIVISIONS[fight.division].shortLabel}</span>
+          ) : (
+            <>
+              {tags.map((t, i) => (
+                <span key={i} className={`tag ${t.cls}`}>
+                  {t.icon}
+                  {t.label}
+                </span>
+              ))}
+              <span className="tag-div">{DIVISIONS[fight.division].shortLabel}</span>
+            </>
+          )}
+        </div>
+        <div className={`frc-rating rating-${ratingTier(fight.result.rating)}`}>
+          <Icon name="star" size={11} />
+          {fight.result.rating.toFixed(2)}
+        </div>
+      </div>
+
+      <div className="frc-body">
+        <FighterSide fighter={fight.fA} isWinner={fAIsWinner} side="left" onClick={onFighterClick} />
+        <div className="frc-mid">
+          <div className={`frc-method method-${fight.result.method}`}>
+            <Icon name={METHOD_ICONS[fight.result.method]} size={11} />
+            {METHOD_LABELS[fight.result.method]}
+          </div>
+          <div className="frc-duration">{fight.result.duration}</div>
+        </div>
+        <FighterSide fighter={fight.fB} isWinner={!fAIsWinner} side="right" onClick={onFighterClick} />
+      </div>
+    </div>
+  );
+}
+
+function FighterSide({
+  fighter,
+  isWinner,
+  side,
+  onClick,
+}: {
   fighter: Fighter;
   isWinner: boolean;
   side: 'left' | 'right';
   onClick: (id: string) => void;
-}
-
-function FighterBlock({ fighter, isWinner, side, onClick }: FighterBlockProps) {
+}) {
   return (
     <div
-      className={`fighter-block ${side} ${isWinner ? 'winner' : 'loser'}`}
+      className={`frc-fighter ${side} ${isWinner ? 'winner' : 'loser'}`}
       onClick={() => onClick(fighter.id)}
     >
-      <div className="fighter-name">
-        <span>{fullName(fighter)}</span>
+      <Flag code={fighter.countryCode} size={16} title={fighter.country} />
+      <div className="frc-fighter-name">
+        {fullName(fighter)}
         {isWinner && (
-          <span className="winner-mark">
-            <Icon name="trophy" size={10} />
+          <span className="winner-dot">
+            <Icon name="trophy" size={9} />
           </span>
         )}
       </div>
-      {fighter.nickname && <div className="fighter-nick">"{fighter.nickname}"</div>}
-      <div className="fighter-record">{recordStr(fighter)}</div>
+      <div className="frc-fighter-record">{recordStr(fighter)}</div>
     </div>
   );
+}
+
+function ratingTier(r: number): string {
+  if (r >= 9.0) return 'epic';
+  if (r >= 8.0) return 'great';
+  if (r >= 7.0) return 'strong';
+  if (r >= 5.0) return 'good';
+  return 'normal';
 }

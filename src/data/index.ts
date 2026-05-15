@@ -54,27 +54,31 @@ export const NICKNAMES: string[] = [
   'Stitch', 'Razor', 'Blade', 'Anvil', 'Hammer', 'Mauler', 'Mangler', 'Reckless',
 ];
 
+/**
+ * Countries with ISO 3166 alpha-2 codes for SVG flag rendering.
+ * (Switched from emoji because flag emoji fails to render on Chrome/Windows.)
+ */
 export const COUNTRIES: Country[] = [
-  { name: 'USA', flag: '🇺🇸' },
-  { name: 'Brazil', flag: '🇧🇷' },
-  { name: 'Russia', flag: '🇷🇺' },
-  { name: 'Dagestan', flag: '🏔️' },
-  { name: 'Ireland', flag: '🇮🇪' },
-  { name: 'England', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
-  { name: 'Mexico', flag: '🇲🇽' },
-  { name: 'Japan', flag: '🇯🇵' },
-  { name: 'South Korea', flag: '🇰🇷' },
-  { name: 'Nigeria', flag: '🇳🇬' },
-  { name: 'New Zealand', flag: '🇳🇿' },
-  { name: 'Australia', flag: '🇦🇺' },
-  { name: 'Canada', flag: '🇨🇦' },
-  { name: 'Poland', flag: '🇵🇱' },
-  { name: 'Sweden', flag: '🇸🇪' },
-  { name: 'France', flag: '🇫🇷' },
-  { name: 'Germany', flag: '🇩🇪' },
-  { name: 'Netherlands', flag: '🇳🇱' },
-  { name: 'Cameroon', flag: '🇨🇲' },
-  { name: 'Kazakhstan', flag: '🇰🇿' },
+  { name: 'USA', code: 'US' },
+  { name: 'Brazil', code: 'BR' },
+  { name: 'Russia', code: 'RU' },
+  { name: 'Dagestan', code: 'DAG' },       // synthetic; use mountain glyph
+  { name: 'Ireland', code: 'IE' },
+  { name: 'England', code: 'GB-ENG' },
+  { name: 'Mexico', code: 'MX' },
+  { name: 'Japan', code: 'JP' },
+  { name: 'South Korea', code: 'KR' },
+  { name: 'Nigeria', code: 'NG' },
+  { name: 'New Zealand', code: 'NZ' },
+  { name: 'Australia', code: 'AU' },
+  { name: 'Canada', code: 'CA' },
+  { name: 'Poland', code: 'PL' },
+  { name: 'Sweden', code: 'SE' },
+  { name: 'France', code: 'FR' },
+  { name: 'Germany', code: 'DE' },
+  { name: 'Netherlands', code: 'NL' },
+  { name: 'Cameroon', code: 'CM' },
+  { name: 'Kazakhstan', code: 'KZ' },
 ];
 
 export const EVENT_PREFIXES: string[] = [
@@ -138,8 +142,6 @@ export const ARCHETYPE_KEYS = Object.keys(ARCHETYPES) as Archetype[];
 // ============================================================
 // DIVISIONS
 // ============================================================
-// Per design doc: "Heavyweights age slower"
-// Also: heavier divisions tend to finish more often (real-world pattern)
 
 export const DIVISIONS: Record<Division, DivisionConfig> = {
   lightweight: {
@@ -189,7 +191,6 @@ export const DIVISION_KEYS = Object.keys(DIVISIONS) as Division[];
 // ============================================================
 // MATCHUP MATRIX
 // ============================================================
-// Row archetype's effective strength against column archetype
 
 export const MATCHUP_MATRIX: Record<Archetype, Record<Archetype, number>> = {
   striker:    { striker: 1.0,  wrestler: 0.85, submission: 1.1, pressure: 0.95, tactical: 1.0 },
@@ -198,3 +199,161 @@ export const MATCHUP_MATRIX: Record<Archetype, Record<Archetype, number>> = {
   pressure:   { striker: 1.05, wrestler: 1.05, submission: 1.1, pressure: 1.0,  tactical: 1.1 },
   tactical:   { striker: 1.0,  wrestler: 1.0,  submission: 1.0, pressure: 0.9,  tactical: 1.0 },
 };
+
+// ============================================================
+// BALANCE — TUNEABLE CONSTANTS
+// ============================================================
+// All of these are pure numbers with no UI knowledge. Tune freely.
+
+/**
+ * Fight rating weights. Final score is 1.0 (boring) → 9.99 (instant classic).
+ */
+export const RATING = {
+  // Base from combined fame: 0 fame → 1.5, 150 fame → ~4.7, asymptote at ~5.8
+  FAME_BASE_FLOOR: 1.5,
+  FAME_BASE_PEAK:  5.8,
+  FAME_BASE_HALF:  150,
+
+  // Additive boosts
+  TITLE_BONUS:        1.4,
+  MAIN_EVENT_BONUS:   0.4,
+
+  // Competitiveness: closer in overall = more exciting
+  COMPETITIVENESS_MAX: 1.7,
+  COMPETITIVENESS_GAP_AT_ZERO: 0,    // 0 overall diff = full bonus
+  COMPETITIVENESS_GAP_AT_FULL: 25,   // 25+ overall diff = no bonus
+
+  // Drama by method/round (set per FightMethod + condition)
+  DRAMA_KO_EARLY: 0.9,    // R1 KO
+  DRAMA_KO_MID:   0.6,    // R2-3 KO
+  DRAMA_KO_LATE:  0.8,    // R4-5 KO
+  DRAMA_SUB_EARLY: 0.9,
+  DRAMA_SUB_MID:   0.7,
+  DRAMA_SUB_LATE:  0.8,
+  DRAMA_DOC:       0.2,
+  DRAMA_DEC_5R:    0.5,   // championship-rounds decision
+  DRAMA_DEC_3R:    0.1,
+  DRAMA_CLOSE_DEC_BONUS: 0.4, // applied if rounds were split
+
+  // Upset: lower-ranked beats higher (delta in overall)
+  UPSET_MAX_BONUS: 0.9,
+  UPSET_GAP_AT_FULL: 20,  // 20+ overall edge upset = full bonus
+
+  // Rivalry (prior meetings between these two)
+  RIVALRY_BONUS_1:  0.3,
+  RIVALRY_BONUS_2:  0.5,
+  RIVALRY_BONUS_3:  0.7,
+  RIVALRY_BONUS_4P: 0.9,
+
+  // Random jitter
+  JITTER: 0.4,
+
+  // Bounds
+  MIN: 1.0,
+  MAX: 9.99,
+} as const;
+
+/**
+ * Fame deltas applied on each fight (and aging).
+ */
+export const FAME = {
+  WIN_BASE:                 1,
+  WIN_FINISH_BONUS:         2,   // additional for KO/SUB
+  WIN_MAIN_EVENT_BONUS:     3,
+  WIN_TITLE_NEW:            8,   // claimed title
+  WIN_TITLE_DEFENSE:        5,
+  WIN_RATING_70_BONUS:      5,   // win in a fight rated 7.0+
+  WIN_RATING_85_BONUS:      10,  // additional if 8.5+ (stacks: 7.0+ adds 5, 8.5+ adds another 5)
+  STREAK_DIVISOR:           3,   // +floor(streak/3) on win
+
+  LOSS_BASE:                -2,
+  LOSS_TO_LOWER_FAME:       -3,  // additional if you lose to lower-fame opp
+  LOSS_TO_LOWER_FAME_GAP:   40,  // how much lower they need to be
+
+  // Annual decay if active and out of prime
+  AGE_PAST_PRIME_DECAY:     -2,
+
+  // Floor / cap
+  MIN: 0,
+} as const;
+
+/**
+ * Career points: drives P4P (active) and GOAT (all-time) leaderboards.
+ * Gain rating-of-win on victory; small fixed loss on losses to keep balance.
+ */
+export const CAREER_POINTS = {
+  WIN_MULT:    1.0,   // wins contribute full fight rating
+  LOSS_FIXED:  -0.5,  // small penalty for any loss (encourages quality)
+  LOSS_HIGH_FAME_OPP_DAMPEN: true, // losses to high-fame opp hurt less (handled in fame.ts)
+} as const;
+
+/**
+ * Hard cap on stored best-fights list.
+ */
+export const BEST_FIGHTS_CAP = 50;
+
+/**
+ * Matchmaking — rivalry-aware booking.
+ *
+ * The matchmaker will preferentially book rematches/trilogies when conditions
+ * are met. These knobs control how aggressively that happens.
+ */
+export const MATCHMAKING = {
+  /** Probability we look for a rematch booking instead of going strictly by ranking. */
+  REMATCH_BASE_CHANCE: 0.18,
+  /** Rematch only triggers if the prior fight was within this rating-delta of being a classic. */
+  REMATCH_MIN_RATING: 6.5,
+  /** Rematch chance multiplier when prior fight was a close decision (split-style). */
+  REMATCH_CLOSE_MULT: 1.6,
+  /** Trilogy bonus chance — both fighters tied at 1-1 in series. */
+  TRILOGY_CHANCE: 0.32,
+  /** Don't book a rematch if the prior fight was more recent than N events. */
+  REMATCH_COOLDOWN_EVENTS: 4,
+  /** Don't book a rematch if the prior fight was older than N events (memory fades). */
+  REMATCH_RECENCY_WINDOW: 12,
+} as const;
+
+/**
+ * Random events — chance per event for each kind, plus knock-on effects.
+ *
+ * "Pre-event" events happen during card building (e.g. someone is injured and
+ * pulls out, a replacement is booked). "Post-event" events happen after fights
+ * (e.g. fame surge, retirement after big loss). "Roster-tick" events happen
+ * during the aging tick (e.g. title strip for inactivity).
+ */
+export const RANDOM_EVENTS = {
+  /** Per-card chance that one booked fight has a fighter pull out injured. */
+  INJURY_PRE_EVENT_CHANCE: 0.18,
+  /** Range of events the injured fighter is sidelined for. */
+  INJURY_MIN_EVENTS: 2,
+  INJURY_MAX_EVENTS: 5,
+  /** Chance a replacement is found (otherwise the fight is scratched). */
+  REPLACEMENT_FOUND_CHANCE: 0.7,
+
+  /** Bonus fame after a 8.5+ epic win. */
+  HYPE_BOOST_RATING_THRESHOLD: 8.5,
+  HYPE_BOOST_FAME: 12,
+
+  /** Title strip: champion missed this many events in a row → vacated. */
+  TITLE_STRIP_INACTIVE_EVENTS: 4,
+
+  /** Retirement: chance an old champion retires after a brutal loss. */
+  RETIREMENT_AFTER_KO_LOSS_AGE: 33,
+  RETIREMENT_AFTER_KO_LOSS_CHANCE: 0.35,
+
+  /** Comeback: a retired (non-HOF) fighter at the right age may unretire. */
+  COMEBACK_BASE_CHANCE: 0.015,   // ~1.5% per event among eligible
+  COMEBACK_MIN_AGE: 30,
+  COMEBACK_MAX_AGE: 36,
+
+  /** Milestones tracked: career win count and title defenses. */
+  MILESTONE_WINS: [10, 15, 20, 25],
+  MILESTONE_DEFENSES: [3, 5, 7, 10],
+
+  /** Post-fight call-out: high-rated fight + winner not yet champion. */
+  CALL_OUT_RATING_THRESHOLD: 7.5,
+  CALL_OUT_CHANCE: 0.45,
+} as const;
+
+/** Hard cap on news feed entries. Newest pushed to front. */
+export const NEWS_FEED_CAP = 300;

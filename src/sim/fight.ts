@@ -1,21 +1,29 @@
-import type { Fighter, FightMethod, FightOutcome } from '@/types';
+import type { Fighter, FightMethod, FightOutcome, GameState } from '@/types';
 import { ARCHETYPES, DIVISIONS, MATCHUP_MATRIX } from '@/data';
 import { effectiveStat } from './fighter';
 import { chance, rand } from './random';
+import { rateFight, formatDuration } from './rating';
+import { applyFameChanges } from './fame';
+import { applyRivalryUpdate, priorMeetingsCount } from './rivalry';
 
 export interface SimulateFightOptions {
   isTitleFight?: boolean;
   isMainEvent?: boolean;
+  priorMeetings: number;
 }
 
 // ============================================================
 // FIGHT SIMULATION
 // ============================================================
+//
+// Returns the full FightOutcome including a rating (1.00-9.99) and a
+// human-readable duration. Rating + duration are populated here so the
+// outcome travels around the rest of the engine as a complete record.
 
 export function simulateFight(
   fA: Fighter,
   fB: Fighter,
-  opts: SimulateFightOptions = {}
+  opts: SimulateFightOptions
 ): FightOutcome {
   const isTitleFight = !!opts.isTitleFight;
   const isFiveRound = isTitleFight || !!opts.isMainEvent;
@@ -95,7 +103,7 @@ export function simulateFight(
     finishRound = maxRounds;
   }
 
-  return {
+  const partial = {
     winnerId: winnerId!,
     loserId: loserId!,
     method: finishMethod,
@@ -104,6 +112,19 @@ export function simulateFight(
     roundsWonA,
     roundsWonB,
   };
+
+  // Compute rating + duration as part of the outcome
+  const rating = rateFight({
+    fA,
+    fB,
+    result: { ...partial, rating: 0, duration: '' }, // rating not needed by rateFight; placeholders OK
+    isTitleFight,
+    isMainEvent: !!opts.isMainEvent,
+    priorMeetings: opts.priorMeetings,
+  });
+  const duration = formatDuration(finishMethod, finishRound!, isFiveRound);
+
+  return { ...partial, rating, duration };
 }
 
 // ============================================================
@@ -121,10 +142,8 @@ function calculatePower(fighter: Fighter, opponent: Fighter): number {
     effectiveStat(fighter, 'durability') * w.durability * 0.7 +
     effectiveStat(fighter, 'fightIQ') * w.fightIQ;
 
-  // Archetype matchup
   composite *= MATCHUP_MATRIX[fighter.archetype][opponent.archetype];
 
-  // Age modifier
   const age = fighter.age;
   let ageMod = 1.0;
   if (age < 22) ageMod = 0.95;
@@ -165,11 +184,10 @@ function checkFinish(
 
   if (!chance(finishChance)) return null;
 
-  // Method based on attacker archetype bias and relevant stats
   const bias = ARCHETYPES[attacker.archetype].finishBias;
   const koWeight = attacker.stats.striking * bias.ko;
   const subWeight = attacker.stats.submission * bias.sub;
-  const docWeight = 6; // rare
+  const docWeight = 6;
 
   const totalW = koWeight + subWeight + docWeight;
   const r = Math.random() * totalW;
@@ -187,20 +205,26 @@ function checkFinish(
 }
 
 // ============================================================
-// APPLY RESULT (mutates fighters)
+// APPLY RESULT (mutates fighters; also propagates to fame/rivalry/state)
 // ============================================================
 
-export interface ApplyResultEventInfo {
-  num: number;
-  name: string;
+export interface ApplyResultInput {
+  state: GameState;
+  fA: Fighter;
+  fB: Fighter;
+  result: FightOutcome;
+  isMainEvent: boolean;
+  eventInfo: { num: number; name: string };
 }
 
-export function applyResult(
-  fA: Fighter,
-  fB: Fighter,
-  result: FightOutcome,
-  eventInfo: ApplyResultEventInfo
-): { winner: Fighter; loser: Fighter } {
+export function applyResult({
+  state,
+  fA,
+  fB,
+  result,
+  isMainEvent,
+  eventInfo,
+}: ApplyResultInput): { winner: Fighter; loser: Fighter } {
   const winner = fA.id === result.winnerId ? fA : fB;
   const loser = fA.id === result.winnerId ? fB : fA;
 
@@ -229,7 +253,9 @@ export function applyResult(
     method: result.method,
     round: result.round,
     isTitleFight: result.isTitleFight,
+    isMainEvent,
     division: fA.division,
+    rating: result.rating,
   };
 
   winner.fightLog.push({
@@ -245,5 +271,55 @@ export function applyResult(
     result: 'L',
   });
 
+  // Note: fame must be applied AFTER applyTitleResult (which sets becameChampAge),
+  // so we do it from the event runner, not here. Same for rivalry.
   return { winner, loser };
+}
+
+/**
+ * Post-title-handling fame + rivalry + best-fights update.
+ * Called after applyResult AND handleTitleResult so we have correct champion state.
+ */
+export function applyPostFightEffects(input: {
+  state: GameState;
+  winner: Fighter;
+  loser: Fighter;
+  fA: Fighter;
+  fB: Fighter;
+  result: FightOutcome;
+  isMainEvent: boolean;
+  eventInfo: { num: number; name: string };
+  division: import('@/types').Division;
+}): void {
+  const { state, winner, loser, fA, fB, result, isMainEvent, eventInfo, division } = input;
+
+  applyFameChanges({ winner, loser, result, rating: result.rating, isMainEvent });
+  applyRivalryUpdate({ state, fA, fB, result, rating: result.rating, eventInfo });
+
+  // Track best fights of all time
+  pushBestFight(state, {
+    eventNum: eventInfo.num,
+    eventName: eventInfo.name,
+    division,
+    winnerId: winner.id,
+    winnerName: `${winner.firstName} ${winner.lastName}`,
+    loserId: loser.id,
+    loserName: `${loser.firstName} ${loser.lastName}`,
+    method: result.method,
+    round: result.round,
+    isTitleFight: result.isTitleFight,
+    rating: result.rating,
+  });
+}
+
+import { BEST_FIGHTS_CAP } from '@/data';
+import type { BestFightRecord } from '@/types';
+
+function pushBestFight(state: GameState, fight: BestFightRecord): void {
+  // Insert sorted desc by rating; cap to BEST_FIGHTS_CAP
+  state.bestFightsAllTime.push(fight);
+  state.bestFightsAllTime.sort((a, b) => b.rating - a.rating);
+  if (state.bestFightsAllTime.length > BEST_FIGHTS_CAP) {
+    state.bestFightsAllTime.length = BEST_FIGHTS_CAP;
+  }
 }

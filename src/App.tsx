@@ -10,8 +10,10 @@ import { TitleHistoryView } from '@/components/TitleHistoryView';
 import { RecordsView } from '@/components/RecordsView';
 import { RosterView } from '@/components/RosterView';
 import { FighterProfile } from '@/components/FighterProfile';
+import { NewsFeedView } from '@/components/NewsFeedView';
+import { EventArchiveView } from '@/components/EventArchiveView';
 
-type Tab = 'event' | 'rankings' | 'history' | 'records' | 'roster';
+type Tab = 'event' | 'news' | 'archive' | 'rankings' | 'history' | 'records' | 'roster';
 
 interface TabConfig {
   id: Tab;
@@ -21,6 +23,8 @@ interface TabConfig {
 
 const TABS: TabConfig[] = [
   { id: 'event',    label: 'Latest Event',     icon: 'home' },
+  { id: 'news',     label: 'News',             icon: 'news' },
+  { id: 'archive',  label: 'Archive',          icon: 'archive' },
   { id: 'rankings', label: 'Rankings',         icon: 'rankings' },
   { id: 'history',  label: 'Title History',    icon: 'history' },
   { id: 'records',  label: 'All-Time Records', icon: 'records' },
@@ -83,6 +87,12 @@ export function App() {
             onSimulate={simulateEvent}
             onFighterClick={setProfileId}
           />
+        )}
+        {tab === 'news' && (
+          <NewsFeedView state={state} onFighterClick={setProfileId} />
+        )}
+        {tab === 'archive' && (
+          <EventArchiveView state={state} onFighterClick={setProfileId} />
         )}
         {tab === 'rankings' && (
           <RankingsView state={state} division={division} onFighterClick={setProfileId} />

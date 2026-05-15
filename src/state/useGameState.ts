@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { GameState } from '@/types';
 import { runEvent, seedInitialRoster } from '@/sim/event';
 
-const STORAGE_KEY = 'cage_legacy_save_v2';
+const STORAGE_KEY = 'cage_legacy_save_v4';
 
 function createNewGame(): GameState {
   const state: GameState = {
@@ -11,6 +11,9 @@ function createNewGame(): GameState {
     titleHistory: [],
     eventArchive: [],
     lastEvent: null,
+    rivalries: {},
+    bestFightsAllTime: [],
+    news: [],
   };
   seedInitialRoster(state);
   return state;
@@ -21,8 +24,17 @@ function loadGame(): GameState | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as GameState;
-    // Sanity check
     if (!parsed.fighters || !Array.isArray(parsed.fighters)) return null;
+    // Defensive defaults if loading partially-shaped data
+    if (!parsed.rivalries) parsed.rivalries = {};
+    if (!parsed.bestFightsAllTime) parsed.bestFightsAllTime = [];
+    if (!parsed.news) parsed.news = [];
+    // Back-fill `injured` for any fighter saved before the field existed
+    for (const f of parsed.fighters) {
+      if (typeof (f as { injured?: number }).injured !== 'number') {
+        (f as { injured: number }).injured = 0;
+      }
+    }
     return parsed;
   } catch (e) {
     console.warn('Load failed', e);
@@ -41,14 +53,12 @@ function saveGame(state: GameState): void {
 export function useGameState() {
   const [state, setState] = useState<GameState>(() => loadGame() ?? createNewGame());
 
-  // Auto-save on state changes
   useEffect(() => {
     saveGame(state);
   }, [state]);
 
   const simulateEvent = useCallback(() => {
     setState((prev) => {
-      // Deep clone so React notices the change and we don't mutate state in-place
       const next: GameState = JSON.parse(JSON.stringify(prev));
       runEvent(next);
       return next;
@@ -60,17 +70,11 @@ export function useGameState() {
     setState(fresh);
   }, []);
 
-  // Convenient lookup map
   const fighterMap = useMemo(() => {
     const m = new Map<string, (typeof state.fighters)[number]>();
     for (const f of state.fighters) m.set(f.id, f);
     return m;
   }, [state.fighters]);
 
-  return {
-    state,
-    simulateEvent,
-    reset,
-    fighterMap,
-  };
+  return { state, simulateEvent, reset, fighterMap };
 }

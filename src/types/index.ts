@@ -12,6 +12,12 @@ export type FightMethod = 'KO' | 'SUB' | 'DEC' | 'DOC';
 
 export type FightResult = 'W' | 'L' | 'D';
 
+/**
+ * ISO 3166 alpha-2 country code. Used by <Flag /> to render an SVG flag.
+ * (Switched from emoji because Chrome on Windows ships no emoji-flag font.)
+ */
+export type CountryCode = string;
+
 export interface FighterStats {
   striking: number;
   grappling: number;
@@ -30,7 +36,9 @@ export interface FightLogEntry {
   method: FightMethod;
   round: number;
   isTitleFight: boolean;
+  isMainEvent: boolean;
   division: Division;
+  rating: number;
 }
 
 export interface Fighter {
@@ -38,8 +46,8 @@ export interface Fighter {
   firstName: string;
   lastName: string;
   nickname: string | null;
-  country: string;
-  flag: string;
+  country: string;        // display name e.g. "Brazil"
+  countryCode: CountryCode; // ISO code for flag rendering, e.g. "BR"
   age: number;
   debutAge: number;
   rarity: Rarity;
@@ -76,6 +84,14 @@ export interface Fighter {
   retiredAtEvent: number | null;
   hallOfFame: boolean;
   inactive: number;
+  /** Number of events the fighter is unable to compete (e.g. injured). Decrements each event. */
+  injured: number;
+
+  // NEW: derived game-feel metrics
+  /** 0+, accumulates from wins/titles/streaks/famous opponents. Drives base fight rating. */
+  fame: number;
+  /** Sum of fight ratings of wins minus penalty for losses. Drives P4P (active) and GOAT (all). */
+  careerPoints: number;
 
   // Logs
   fightLog: FightLogEntry[];
@@ -87,6 +103,7 @@ export interface TitleReignFightLog {
   method: FightMethod;
   round: number;
   result: FightResult;
+  rating: number;
 }
 
 export interface TitleReign {
@@ -104,12 +121,43 @@ export interface TitleReign {
   fights: TitleReignFightLog[];
 }
 
+// ============================================================
+// RIVALRIES
+// ============================================================
+
+export interface RivalryMeeting {
+  eventNum: number;
+  eventName: string;
+  winnerId: string;
+  method: FightMethod;
+  round: number;
+  rating: number;
+}
+
+export interface Rivalry {
+  id: string;             // canonical: smaller-id "_" larger-id
+  fighterAId: string;     // lexicographically smaller of the two
+  fighterBId: string;
+  aWins: number;
+  bWins: number;
+  draws: number;
+  meetings: RivalryMeeting[];
+  totalRating: number;
+  lastEventNum: number;
+}
+
+// ============================================================
+// EVENT / CARD
+// ============================================================
+
 export interface CardFight {
   fAId: string;
   fBId: string;
   isTitleFight: boolean;
   isMainEvent: boolean;
   division: Division;
+  isRivalry: boolean;     // pre-fight knowledge: have these two fought before?
+  priorMeetings: number;  // count of prior meetings (for display)
 }
 
 export interface FightOutcome {
@@ -120,6 +168,8 @@ export interface FightOutcome {
   isTitleFight: boolean;
   roundsWonA: number;
   roundsWonB: number;
+  rating: number;          // 1.00-9.99
+  duration: string;        // e.g. "R2 3:12" or "Full 5R"
 }
 
 export interface EventFight {
@@ -128,6 +178,8 @@ export interface EventFight {
   isTitleFight: boolean;
   isMainEvent: boolean;
   division: Division;
+  isRivalry: boolean;
+  priorMeetings: number;
   result: FightOutcome;
 }
 
@@ -137,6 +189,31 @@ export interface EventArchiveEntry {
   city: string;
   date: string;
   champions: Partial<Record<Division, string>>;
+  topRating: number;       // highest fight rating from this event (for FOTN/FOTY)
+  topFightSummary: string | null; // e.g. "Silva def. Santos (KO R2) — 8.45"
+  /** Quick summary of the card: # fights, # title fights, headline */
+  fightCount: number;
+  titleFightCount: number;
+  headline: string | null;
+  /** Full per-fight summary for the archive view (lean — for storage). */
+  fights: ArchivedFight[];
+}
+
+export interface ArchivedFight {
+  fAId: string;
+  fAName: string;
+  fBId: string;
+  fBName: string;
+  winnerId: string;
+  loserId: string;
+  method: FightMethod;
+  round: number;
+  duration: string;
+  rating: number;
+  isTitleFight: boolean;
+  isMainEvent: boolean;
+  division: Division;
+  priorMeetings: number;
 }
 
 export interface EventData {
@@ -148,12 +225,76 @@ export interface EventData {
   headline: string | null;
 }
 
+// ============================================================
+// NEWS FEED / RANDOM EVENTS
+// ============================================================
+
+/**
+ * NewsEntry kinds:
+ *   injury           — pulled from upcoming card with injury
+ *   replacement      — short-notice replacement booked
+ *   hype-boost       — fame surge after epic win
+ *   title-strip      — champion stripped (inactivity or non-title KO loss)
+ *   retirement       — fighter retires (mid-career, after big loss, age-driven)
+ *   comeback         — retired fighter unretires
+ *   milestone        — career milestone (10 wins, 5 title defenses, etc.)
+ *   fight-classic    — flagged for archive: a fight rated 9.0+
+ *   debut            — notable prospect signs / debuts
+ *   call-out         — post-fight call-out of a higher-ranked fighter (sets up rematch)
+ */
+export type NewsKind =
+  | 'injury'
+  | 'replacement'
+  | 'hype-boost'
+  | 'title-strip'
+  | 'retirement'
+  | 'comeback'
+  | 'milestone'
+  | 'fight-classic'
+  | 'debut'
+  | 'call-out';
+
+export interface NewsEntry {
+  id: string;
+  eventNum: number;       // the event this is associated with (pre- or post-)
+  kind: NewsKind;
+  /** Display text shown in the feed. */
+  text: string;
+  /** Optional primary fighter (clickable in UI). */
+  fighterId: string | null;
+  /** Optional secondary fighter (e.g. replacement, opponent). */
+  fighterBId: string | null;
+}
+
+// ============================================================
+// ALL-TIME BEST FIGHTS
+// ============================================================
+
+export interface BestFightRecord {
+  eventNum: number;
+  eventName: string;
+  division: Division;
+  winnerId: string;
+  winnerName: string;
+  loserId: string;
+  loserName: string;
+  method: FightMethod;
+  round: number;
+  isTitleFight: boolean;
+  rating: number;
+}
+
 export interface GameState {
   eventCount: number;
   fighters: Fighter[];
   titleHistory: TitleReign[];
   eventArchive: EventArchiveEntry[];
   lastEvent: EventData | null;
+
+  // NEW
+  rivalries: Record<string, Rivalry>;
+  bestFightsAllTime: BestFightRecord[];     // bounded to top 50
+  news: NewsEntry[];                         // bounded to ~300; newest-first when read
 }
 
 // ============================================================
@@ -180,17 +321,15 @@ export interface ArchetypeConfig {
 export interface DivisionConfig {
   label: string;
   shortLabel: string;
-  // Heavier divisions age slower (per design doc)
   prospectMax: number;
   primeMin: number;
   primeMax: number;
   retireRiskStart: number;
   retireRiskMax: number;
-  // Heavyweights finish more often
   finishRateMultiplier: number;
 }
 
 export interface Country {
   name: string;
-  flag: string;
+  code: CountryCode;
 }
