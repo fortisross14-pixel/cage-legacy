@@ -1,8 +1,10 @@
 import type {
+  CardFight,
   Division,
   EventData,
   EventFight,
   GameState,
+  PreparedEvent,
 } from '@/types';
 import { CITIES, DIVISION_KEYS, DIVISIONS, EVENT_PREFIXES } from '@/data';
 import { ageFighter, evaluateHallOfFame, fullName, generateFighter } from './fighter';
@@ -27,29 +29,43 @@ const ROSTER_PER_DIVISION = 24;
 const AGE_EVERY_N_EVENTS = 8;
 
 // ============================================================
-// EVENT EXECUTION
+// EVENT EXECUTION — split into prepare + execute for the
+// preview→reveal UX. `runEvent` calls both back-to-back.
 // ============================================================
 
-export function runEvent(state: GameState): EventData {
+/**
+ * Prepare the next event: increment counter, tick injuries, build the card,
+ * roll pre-event injuries. Returns the prepared card without running fights.
+ *
+ * The state IS mutated (eventCount++, injuries countdown/rolled). The card
+ * returned is what will be executed.
+ */
+export function prepareNextEvent(state: GameState): PreparedEvent {
   state.eventCount++;
   const num = state.eventCount;
 
-  // === INJURY COUNTDOWN ===
-  // Decrement everyone's injury timer at the START of the event.
+  // Injury countdown at start of event
   for (const f of state.fighters) {
     if (f.injured > 0) f.injured = Math.max(0, f.injured - 1);
   }
 
-  const eventName = `CL ${num}: ${pick(EVENT_PREFIXES)}`;
+  const name = `CL ${num}: ${pick(EVENT_PREFIXES)}`;
   const city = pick(CITIES);
   const date = computeDate(num);
-  const eventInfo = { num, name: eventName };
 
-  // Build card (rivalry- + injury-aware)
   const card = buildEventCard(state);
-
-  // === PRE-EVENT RANDOM EVENTS: injuries / pullouts ===
   rollPreEventInjury(state, card, num);
+
+  return { num, name, city, date, card };
+}
+
+/**
+ * Execute the prepared event: run fights, apply results / fame / rivalry /
+ * news / aging / archive. Returns the full EventData.
+ */
+export function executeEvent(state: GameState, prepared: PreparedEvent): EventData {
+  const { num, name, city, date, card } = prepared;
+  const eventInfo = { num, name };
 
   // Hydrate fights and run them
   const fights: EventFight[] = card.map((cardFight) => {
@@ -82,7 +98,6 @@ export function runEvent(state: GameState): EventData {
       });
     }
 
-    // Fame + rivalry + best-fights AFTER title handling (so champion status is final)
     applyPostFightEffects({
       state,
       winner,
@@ -95,7 +110,6 @@ export function runEvent(state: GameState): EventData {
       division: cardFight.division,
     });
 
-    // === POST-FIGHT RANDOM EVENTS ===
     rollPostFightEvents({
       state,
       fA,
@@ -118,10 +132,8 @@ export function runEvent(state: GameState): EventData {
     };
   });
 
-  // Headline picks the highest-rated fight as the story
   const headline = generateHeadline(fights, state);
 
-  // === ROSTER-TICK RANDOM EVENTS: title strips, comebacks ===
   rollRosterTickEvents(state, num);
 
   // Periodic aging
@@ -140,17 +152,23 @@ export function runEvent(state: GameState): EventData {
     });
   }
 
-  // Replenish
   replenishRoster(state);
 
-  // Archive (now includes per-fight snapshot + headline)
-  const archiveEntry = buildEventArchiveEntry(state, num, eventName, city, date, fights, headline);
+  const archiveEntry = buildEventArchiveEntry(state, num, name, city, date, fights, headline);
   state.eventArchive.push(archiveEntry);
   if (state.eventArchive.length > 200) state.eventArchive.shift();
 
-  const eventData: EventData = { num, name: eventName, city, date, fights, headline };
+  const eventData: EventData = { num, name, city, date, fights, headline };
   state.lastEvent = eventData;
   return eventData;
+}
+
+/**
+ * Convenience: prepare + execute back-to-back. Used by tests / direct sim.
+ */
+export function runEvent(state: GameState): EventData {
+  const prepared = prepareNextEvent(state);
+  return executeEvent(state, prepared);
 }
 
 // ============================================================
@@ -200,7 +218,7 @@ function replenishRoster(state: GameState): void {
 // DATE
 // ============================================================
 
-function computeDate(eventNum: number): string {
+export function computeDate(eventNum: number): string {
   const date = new Date(2025, 0, 1);
   date.setDate(date.getDate() + eventNum * 21);
   return date.toISOString();

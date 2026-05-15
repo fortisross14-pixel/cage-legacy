@@ -225,6 +225,19 @@ export interface EventData {
   headline: string | null;
 }
 
+/**
+ * An event that's been prepared (card built, eventCount incremented, injury
+ * countdown applied, pre-event injuries rolled) but whose fights have not yet
+ * been executed. This is the state shown in the "Preview" stage of the UI.
+ */
+export interface PreparedEvent {
+  num: number;
+  name: string;
+  city: string;
+  date: string;
+  card: CardFight[];     // resolved matchups (after any injury swaps)
+}
+
 // ============================================================
 // NEWS FEED / RANDOM EVENTS
 // ============================================================

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { GameState } from '@/types';
-import { runEvent, seedInitialRoster } from '@/sim/event';
-
-const STORAGE_KEY = 'cage_legacy_save_v4';
+import type { GameState, EventData, PreparedEvent } from '@/types';
+import {
+  prepareNextEvent as engPrepare,
+  executeEvent as engExecute,
+  seedInitialRoster,
+} from '@/sim/event';
+import { loadSlotGameState, saveSlotGameState } from './useUniverses';
 
 function createNewGame(): GameState {
   const state: GameState = {
@@ -19,55 +22,65 @@ function createNewGame(): GameState {
   return state;
 }
 
-function loadGame(): GameState | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as GameState;
-    if (!parsed.fighters || !Array.isArray(parsed.fighters)) return null;
-    // Defensive defaults if loading partially-shaped data
-    if (!parsed.rivalries) parsed.rivalries = {};
-    if (!parsed.bestFightsAllTime) parsed.bestFightsAllTime = [];
-    if (!parsed.news) parsed.news = [];
-    // Back-fill `injured` for any fighter saved before the field existed
-    for (const f of parsed.fighters) {
-      if (typeof (f as { injured?: number }).injured !== 'number') {
-        (f as { injured: number }).injured = 0;
-      }
-    }
-    return parsed;
-  } catch (e) {
-    console.warn('Load failed', e);
-    return null;
-  }
-}
+/**
+ * Game state for one universe slot.
+ *
+ * Two-step event flow:
+ *   prepareEvent() — builds the card (mutates state for injuries/eventCount).
+ *                    Caller stores the returned PreparedEvent in UI state and
+ *                    shows the preview.
+ *   executeEvent(prepared) — runs the prepared fights. Returns the EventData.
+ *
+ * One-step convenience also provided: simulateEvent() does both.
+ */
+export function useGameState(slotId: string) {
+  const [state, setState] = useState<GameState>(() => loadSlotGameState(slotId) ?? createNewGame());
 
-function saveGame(state: GameState): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.warn('Save failed', e);
-  }
-}
-
-export function useGameState() {
-  const [state, setState] = useState<GameState>(() => loadGame() ?? createNewGame());
-
+  // Re-load when the active slot changes
   useEffect(() => {
-    saveGame(state);
+    const loaded = loadSlotGameState(slotId);
+    if (loaded) setState(loaded);
+    else setState(createNewGame());
+  }, [slotId]);
+
+  // Persist on every change
+  useEffect(() => {
+    saveSlotGameState(slotId, state);
+  }, [slotId, state]);
+
+  /** Step 1: build the card. Mutates state. Returns prepared event for preview. */
+  const prepareEvent = useCallback((): PreparedEvent => {
+    const next: GameState = JSON.parse(JSON.stringify(state));
+    const prepared = engPrepare(next);
+    setState(next);
+    return prepared;
   }, [state]);
 
-  const simulateEvent = useCallback(() => {
-    setState((prev) => {
-      const next: GameState = JSON.parse(JSON.stringify(prev));
-      runEvent(next);
-      return next;
-    });
-  }, []);
+  /**
+   * Step 2: execute the prepared fights. Uses CURRENT state (post-prepare).
+   * The prepared event is passed in; this runs the fights and commits results.
+   */
+  const executeEvent = useCallback(
+    (prepared: PreparedEvent): EventData | null => {
+      const next: GameState = JSON.parse(JSON.stringify(state));
+      const result = engExecute(next, prepared);
+      setState(next);
+      return result;
+    },
+    [state]
+  );
+
+  /** Convenience: prepare + execute back-to-back (one-step sim). */
+  const simulateEvent = useCallback((): EventData | null => {
+    const next: GameState = JSON.parse(JSON.stringify(state));
+    const prepared = engPrepare(next);
+    const result = engExecute(next, prepared);
+    setState(next);
+    return result;
+  }, [state]);
 
   const reset = useCallback(() => {
-    const fresh = createNewGame();
-    setState(fresh);
+    setState(createNewGame());
   }, []);
 
   const fighterMap = useMemo(() => {
@@ -76,5 +89,5 @@ export function useGameState() {
     return m;
   }, [state.fighters]);
 
-  return { state, simulateEvent, reset, fighterMap };
+  return { state, prepareEvent, executeEvent, simulateEvent, reset, fighterMap };
 }
