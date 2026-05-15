@@ -113,6 +113,7 @@ export function generateFighter(opts: GenerateOptions): Fighter {
     fame: 0,
     careerPoints: 0,
     fightLog: [],
+    rankHistory: [],
   };
 }
 

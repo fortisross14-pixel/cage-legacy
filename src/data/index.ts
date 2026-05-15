@@ -354,7 +354,7 @@ export const RANDOM_EVENTS = {
   HYPE_BOOST_FAME: 12,
 
   /** Title strip: champion missed this many events in a row → vacated. */
-  TITLE_STRIP_INACTIVE_EVENTS: 4,
+  TITLE_STRIP_INACTIVE_MAIN_EVENTS: 4,
 
   /** Retirement: chance an old champion retires after a brutal loss. */
   RETIREMENT_AFTER_KO_LOSS_AGE: 33,

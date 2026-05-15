@@ -234,6 +234,20 @@ export function executeEvent(state: GameState, prepared: PreparedEvent): EventDa
   state.eventArchive.push(archiveEntry);
   if (state.eventArchive.length > 500) state.eventArchive.shift();
 
+  // Snapshot rank history for every active fighter. We only push when the rank
+  // changes vs the most recent snapshot, keeping the history sparse.
+  for (const f of state.fighters) {
+    if (f.retired) continue;
+    if (!f.rankHistory) f.rankHistory = [];
+    const rank = getRankLabel(state, f);
+    const last = f.rankHistory[f.rankHistory.length - 1];
+    if (!last || last.rank !== rank) {
+      f.rankHistory.push({ eventNum: num, date, rank });
+      // Cap to avoid unbounded growth — keep last 200 transitions
+      if (f.rankHistory.length > 200) f.rankHistory.shift();
+    }
+  }
+
   const eventData: EventData = { num, kindNum, kind, name, city, date, fights, headline, rankChanges };
   state.lastEvent = eventData;
   return eventData;

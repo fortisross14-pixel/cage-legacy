@@ -183,9 +183,20 @@ export function loadSlotGameState(id: string): GameState | null {
     if (typeof parsed.normalEventCount !== 'number') parsed.normalEventCount = 0;
     if (typeof parsed.prospectEventCount !== 'number') parsed.prospectEventCount = 0;
     if (!parsed.divisionLastFightEvent) parsed.divisionLastFightEvent = {};
+    // Back-fill lastDefenseMainEvent on title reigns (was added in iteration 9)
+    if (Array.isArray(parsed.titleHistory)) {
+      for (const r of parsed.titleHistory) {
+        if (typeof (r as { lastDefenseMainEvent?: number }).lastDefenseMainEvent !== 'number') {
+          (r as { lastDefenseMainEvent: number }).lastDefenseMainEvent = parsed.mainEventCount ?? 0;
+        }
+      }
+    }
     for (const f of parsed.fighters) {
       if (typeof (f as { injured?: number }).injured !== 'number') {
         (f as { injured: number }).injured = 0;
+      }
+      if (!Array.isArray((f as { rankHistory?: unknown }).rankHistory)) {
+        (f as { rankHistory: unknown[] }).rankHistory = [];
       }
     }
     return parsed;

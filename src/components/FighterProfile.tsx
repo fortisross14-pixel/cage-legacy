@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Fighter, FighterStats, GameState } from '@/types';
 import { ARCHETYPES, DIVISIONS } from '@/data';
 import { fullName } from '@/sim/fighter';
+import { getRecentStats } from '@/sim/recentStats';
 import { rivalriesFor } from '@/sim/rivalry';
 import { Icon, type IconName } from '@/icons';
 import { Flag } from './Flag';
@@ -40,6 +41,14 @@ export function FighterProfile({ fighter, state, onClose }: Props) {
   const reigns = state.titleHistory.filter((r) => r.fighterId === fighter.id);
   const log = [...fighter.fightLog].reverse().slice(0, 25);
   const rivalries = rivalriesFor(state, fighter.id);
+  const recent = getRecentStats(state, fighter);
+
+  // Compute total reign duration in months (assume 6 events/month at standard cadence)
+  const totalReignEvents = reigns.reduce((sum, r) => {
+    const end = r.endEvent ?? state.eventCount;
+    return sum + Math.max(0, end - r.startEvent + 1);
+  }, 0);
+  const reignDurationMonths = (totalReignEvents / 6).toFixed(1);
 
   return (
     <div className="modal" onClick={(e) => {
@@ -84,18 +93,57 @@ export function FighterProfile({ fighter, state, onClose }: Props) {
           </div>
         </div>
 
-        {/* Headline numbers — fame + P4P prominent */}
-        <div className="profile-record-row">
-          <Stat label="Wins" value={fighter.wins} color="green" />
-          <Stat label="Losses" value={fighter.losses} color="red" />
-          <Stat label="KO" value={fighter.koWins} />
-          <Stat label="SUB" value={fighter.subWins} />
-          <Stat label="DEC" value={fighter.decWins} />
-          <Stat label="Fame" value={Math.round(fighter.fame)} color="gold" />
-          <Stat label="P4P pts" value={fighter.careerPoints.toFixed(1)} color="gold" />
-          <Stat label="Reigns" value={fighter.titleReigns} color="gold" />
-          <Stat label="Def." value={fighter.titleDefenses} color="gold" />
+        {/* Title summary line */}
+        <div className="profile-title-line">
+          <div className="title-line-item">
+            <div className="title-line-val">{fighter.titleReigns}</div>
+            <div className="title-line-lbl">Reigns</div>
+          </div>
+          <div className="title-line-sep" />
+          <div className="title-line-item">
+            <div className="title-line-val">{fighter.titleDefenses}</div>
+            <div className="title-line-lbl">Defenses</div>
+          </div>
+          <div className="title-line-sep" />
+          <div className="title-line-item">
+            <div className="title-line-val">{reignDurationMonths}</div>
+            <div className="title-line-lbl">Months as champ</div>
+          </div>
         </div>
+
+        {/* Period stats table — last 12mo vs career */}
+        <div className="period-table">
+          <div className="period-row period-header">
+            <div className="period-label">Period</div>
+            <div className="period-cell">W-L</div>
+            <div className="period-cell">Fame</div>
+            <div className="period-cell">P4P</div>
+            <div className="period-cell">Sub</div>
+            <div className="period-cell">KO/TKO</div>
+            <div className="period-cell">Dec</div>
+          </div>
+          <div className="period-row">
+            <div className="period-label">Last 12 months</div>
+            <div className="period-cell">{recent.wins}-{recent.losses}</div>
+            <div className="period-cell">—</div>
+            <div className="period-cell">{recent.p4pPoints.toFixed(1)}</div>
+            <div className="period-cell">{recent.subWins}</div>
+            <div className="period-cell">{recent.koWins}</div>
+            <div className="period-cell">{recent.decWins}</div>
+          </div>
+          <div className="period-row">
+            <div className="period-label">Career</div>
+            <div className="period-cell">{fighter.wins}-{fighter.losses}</div>
+            <div className="period-cell">{Math.round(fighter.fame)}</div>
+            <div className="period-cell">{fighter.careerPoints.toFixed(1)}</div>
+            <div className="period-cell">{fighter.subWins}</div>
+            <div className="period-cell">{fighter.koWins}</div>
+            <div className="period-cell">{fighter.decWins}</div>
+          </div>
+        </div>
+
+        {/* Career rank chart */}
+        <RankCareerChart fighter={fighter} state={state} />
 
         {/* Tabs */}
         <div className="profile-tabs">
@@ -272,6 +320,156 @@ function Stat({ label, value, color }: { label: string; value: number | string; 
     <div className="prr-stat">
       <div className={`prr-val ${color ?? ''}`}>{value}</div>
       <div className="prr-lbl">{label}</div>
+    </div>
+  );
+}
+
+/**
+ * RankCareerChart — visualizes a fighter's rank trajectory over time.
+ * X-axis = events (chronological). Y-axis = rank, top to bottom.
+ *   Top of chart = Champion ('C')
+ *   Next 15 rows = ranks 1-15
+ *   Bottom row = "Low rank" (#16+)
+ */
+function RankCareerChart({ fighter, state }: { fighter: Fighter; state: GameState }) {
+  const history = fighter.rankHistory ?? [];
+  if (history.length === 0) {
+    return (
+      <div className="profile-section">
+        <h3><Icon name="medal" size={12} /> Career Rank Trajectory</h3>
+        <div className="empty-state inline">No fights yet — chart will populate as the fighter competes.</div>
+      </div>
+    );
+  }
+
+  // SVG dimensions
+  const W = 600;
+  const H = 200;
+  const PAD_L = 56;
+  const PAD_R = 12;
+  const PAD_T = 12;
+  const PAD_B = 28;
+  const plotW = W - PAD_L - PAD_R;
+  const plotH = H - PAD_T - PAD_B;
+
+  // Y rows: 0=C, 1-15=#1..#15, 16=low. Total 17 slots.
+  const ROWS = 17;
+  const rowHeight = plotH / (ROWS - 1);
+  const rankToRow = (rank: string | null): number => {
+    if (rank === 'C') return 0;
+    if (rank === null) return 16;
+    const n = parseInt(rank, 10);
+    if (isNaN(n)) return 16;
+    if (n <= 15) return n;
+    return 16; // ranks below #15 collapse to "low"
+  };
+
+  // X axis: from first history entry's eventNum to current eventCount
+  const firstEvent = history[0].eventNum;
+  const lastEvent = state.eventCount;
+  const range = Math.max(1, lastEvent - firstEvent);
+
+  // Build the line: extend last point to current eventCount
+  const points: Array<{ x: number; y: number; rank: string | null; eventNum: number }> = [];
+  for (const h of history) {
+    const x = PAD_L + ((h.eventNum - firstEvent) / range) * plotW;
+    const y = PAD_T + rankToRow(h.rank) * rowHeight;
+    points.push({ x, y, rank: h.rank, eventNum: h.eventNum });
+  }
+  // Step interpolation — extend each segment until the next event
+  const segments: string[] = [];
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const nextX = i + 1 < points.length ? points[i + 1].x : PAD_L + plotW;
+    segments.push(`M ${p.x.toFixed(1)} ${p.y.toFixed(1)} L ${nextX.toFixed(1)} ${p.y.toFixed(1)}`);
+    if (i + 1 < points.length) {
+      const next = points[i + 1];
+      segments.push(`L ${nextX.toFixed(1)} ${next.y.toFixed(1)}`);
+    }
+  }
+  const pathD = segments.join(' ');
+
+  // Y-axis labels at key rows
+  const yLabels: Array<{ row: number; label: string }> = [
+    { row: 0, label: 'C' },
+    { row: 1, label: '#1' },
+    { row: 5, label: '#5' },
+    { row: 10, label: '#10' },
+    { row: 15, label: '#15' },
+    { row: 16, label: 'low' },
+  ];
+
+  // X-axis: tick marks every ~3 months (18 events)
+  const xTickStep = 18;
+  const xTicks: Array<{ x: number; label: string }> = [];
+  for (let e = firstEvent; e <= lastEvent; e += xTickStep) {
+    const x = PAD_L + ((e - firstEvent) / range) * plotW;
+    xTicks.push({ x, label: `E${e}` });
+  }
+
+  return (
+    <div className="profile-section">
+      <h3><Icon name="medal" size={12} /> Career Rank Trajectory</h3>
+      <div className="rank-chart-wrap">
+        <svg
+          className="rank-chart"
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="xMidYMid meet"
+          role="img"
+          aria-label="Career rank chart"
+        >
+          {/* gridlines */}
+          {yLabels.map((yl) => {
+            const y = PAD_T + yl.row * rowHeight;
+            return (
+              <line
+                key={`grid-${yl.row}`}
+                x1={PAD_L}
+                x2={W - PAD_R}
+                y1={y}
+                y2={y}
+                className={`rank-chart-grid ${yl.row === 0 ? 'is-c' : ''}`}
+              />
+            );
+          })}
+          {/* y labels */}
+          {yLabels.map((yl) => (
+            <text
+              key={`ylab-${yl.row}`}
+              x={PAD_L - 6}
+              y={PAD_T + yl.row * rowHeight + 4}
+              className={`rank-chart-ylabel ${yl.row === 0 ? 'is-c' : ''}`}
+              textAnchor="end"
+            >
+              {yl.label}
+            </text>
+          ))}
+          {/* x ticks */}
+          {xTicks.map((t, i) => (
+            <text
+              key={`xt-${i}`}
+              x={t.x}
+              y={H - PAD_B + 16}
+              className="rank-chart-xlabel"
+              textAnchor="middle"
+            >
+              {t.label}
+            </text>
+          ))}
+          {/* The trajectory line */}
+          <path d={pathD} className="rank-chart-line" />
+          {/* Dots at each transition */}
+          {points.map((p, i) => (
+            <circle
+              key={`pt-${i}`}
+              cx={p.x}
+              cy={p.y}
+              r={p.rank === 'C' ? 4 : 2.5}
+              className={`rank-chart-dot ${p.rank === 'C' ? 'is-c' : ''}`}
+            />
+          ))}
+        </svg>
+      </div>
     </div>
   );
 }

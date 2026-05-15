@@ -95,6 +95,19 @@ export interface Fighter {
 
   // Logs
   fightLog: FightLogEntry[];
+  /**
+   * Sparse rank-history snapshot. We push a new entry whenever a fighter's
+   * rank changes (compared to the previous entry). Used for the career chart.
+   * "C" = champion, "1".."N" = rank, "low" = below #15.
+   */
+  rankHistory: RankHistoryEntry[];
+}
+
+export interface RankHistoryEntry {
+  eventNum: number;
+  date: string;     // ISO date
+  /** Either "C", a numeric rank string ("1".."N"), or null if below display threshold. */
+  rank: string | null;
 }
 
 export interface TitleReignFightLog {
@@ -115,6 +128,8 @@ export interface TitleReign {
   startEventName: string;
   startAge: number;
   defenses: number;
+  /** Main-event count at the time of the most recent title fight (win or capture). */
+  lastDefenseMainEvent: number;
   endEvent: number | null;
   endEventName: string | null;
   lostTo: string | null;

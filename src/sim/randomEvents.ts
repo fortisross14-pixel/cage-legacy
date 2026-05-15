@@ -251,27 +251,27 @@ export function rollPostFightEvents(input: PostFightInput): void {
 // ============================================================
 
 export function rollRosterTickEvents(state: GameState, eventNum: number): void {
-  // 1. Title strip for inactive champions (haven't fought in too long)
+  // 1. Title strip for inactive champions — measured in MAIN events, since
+  //    champions only ever fight on main events. If 4 main events pass without
+  //    a title defense (≈ 4 months), the belt is vacated.
+  const stripThresholdMains = RANDOM_EVENTS.TITLE_STRIP_INACTIVE_MAIN_EVENTS;
   for (const f of state.fighters) {
-    if (
-      f.isChampion &&
-      !f.retired &&
-      f.inactive >= RANDOM_EVENTS.TITLE_STRIP_INACTIVE_EVENTS
-    ) {
-      const reign = state.titleHistory.find(
-        (r) => r.fighterId === f.id && r.division === f.division && !r.endEvent
-      );
+    if (!f.isChampion || f.retired) continue;
+    const reign = state.titleHistory.find(
+      (r) => r.fighterId === f.id && r.division === f.division && !r.endEvent
+    );
+    if (!reign) continue;
+    const mainsSinceDefense = state.mainEventCount - reign.lastDefenseMainEvent;
+    if (mainsSinceDefense >= stripThresholdMains) {
       f.isChampion = false;
-      if (reign) {
-        reign.endEvent = eventNum;
-        reign.endEventName = '(stripped — inactivity)';
-        reign.lostTo = '— (stripped)';
-      }
+      reign.endEvent = eventNum;
+      reign.endEventName = '(stripped — inactivity)';
+      reign.lostTo = '— (stripped)';
       addNews({
         state,
         eventNum,
         kind: 'title-strip',
-        text: `${fullName(f)} is stripped of the title due to inactivity (${f.inactive} events).`,
+        text: `${fullName(f)} is stripped of the title due to inactivity (${mainsSinceDefense} main events without defending).`,
         fighterId: f.id,
       });
     }

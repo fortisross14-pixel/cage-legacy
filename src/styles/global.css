@@ -1610,29 +1610,30 @@ main {
   align-items: center;
   gap: 5px;
   font-family: var(--font-body);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   letter-spacing: var(--tracking-wider);
   text-transform: uppercase;
-  padding: 4px 10px;
+  padding: 5px 11px;
   border-radius: 4px;
   background: var(--bg-elev);
-  color: var(--text-dim);
-  border: 1px solid var(--border);
+  color: var(--text-bright);
+  border: 1px solid var(--border-bright);
   line-height: 1;
   white-space: nowrap;
 }
 
-.frc-method[data-method='KO']  { color: var(--red-bright); background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.25); }
-.frc-method[data-method='SUB'] { color: var(--purple);    background: rgba(168, 85, 247, 0.1); border-color: rgba(168, 85, 247, 0.25); }
-.frc-method[data-method='DEC'] { color: var(--cyan-bright); background: rgba(34, 211, 238, 0.08); border-color: rgba(34, 211, 238, 0.22); }
-.frc-method[data-method='DOC'] { color: var(--orange);    background: rgba(249, 115, 22, 0.1); border-color: rgba(249, 115, 22, 0.25); }
-.frc-method[data-method='-']   { background: transparent; color: var(--text-faint); border-style: dashed; }
+.frc-method[data-method='KO']  { color: #ff6b6b; background: rgba(239, 68, 68, 0.18); border-color: rgba(239, 68, 68, 0.5); }
+.frc-method[data-method='SUB'] { color: #c084fc; background: rgba(168, 85, 247, 0.18); border-color: rgba(168, 85, 247, 0.5); }
+.frc-method[data-method='DEC'] { color: #67e8f9; background: rgba(34, 211, 238, 0.15); border-color: rgba(34, 211, 238, 0.45); }
+.frc-method[data-method='DOC'] { color: #fdba74; background: rgba(249, 115, 22, 0.18); border-color: rgba(249, 115, 22, 0.5); }
+.frc-method[data-method='-']   { background: transparent; color: var(--text-dim); border-style: dashed; }
 
 .frc-duration {
   font-family: var(--font-stat);
-  font-size: 10px;
-  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-bright);
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
 }
@@ -3543,4 +3544,181 @@ main {
 /* --- ARCHIVE FILTER TABS ---------------------------------- */
 .archive-filter {
   margin-bottom: 14px;
+}
+
+/* ============================================================
+ * ITERATION 9 — PROFILE REDESIGN + RANK CHART + ALL-TIME TABS
+ * ============================================================ */
+
+/* --- Title summary line (Reigns / Defenses / Months) ---- */
+.profile-title-line {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 18px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  margin-bottom: 16px;
+}
+
+.title-line-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.title-line-val {
+  font-family: var(--font-stat);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--gold-bright);
+  line-height: 1;
+  letter-spacing: var(--tracking-tight);
+}
+
+.title-line-lbl {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-faint);
+  letter-spacing: var(--tracking-widest);
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.title-line-sep {
+  width: 1px;
+  height: 32px;
+  background: var(--border);
+}
+
+/* --- Period stats table (last 12mo vs Career) ------------ */
+.period-table {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  margin-bottom: 18px;
+  font-family: var(--font-stat);
+}
+
+.period-row {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(6, 1fr);
+  background: var(--bg-elev);
+  padding: 10px 14px;
+  align-items: center;
+}
+
+.period-header {
+  background: var(--bg-elev-2);
+}
+
+.period-header .period-label,
+.period-header .period-cell {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-faint);
+  letter-spacing: var(--tracking-widest);
+  text-transform: uppercase;
+}
+
+.period-label {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-bright);
+}
+
+.period-cell {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-bright);
+  text-align: center;
+}
+
+/* --- Rank career chart ----------------------------------- */
+.rank-chart-wrap {
+  width: 100%;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 8px;
+}
+
+.rank-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.rank-chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.5;
+}
+
+.rank-chart-grid.is-c {
+  stroke: var(--gold);
+  stroke-dasharray: none;
+  opacity: 0.6;
+}
+
+.rank-chart-ylabel {
+  font-family: var(--font-stat);
+  font-size: 10px;
+  font-weight: 700;
+  fill: var(--text-dim);
+}
+
+.rank-chart-ylabel.is-c {
+  fill: var(--gold-bright);
+}
+
+.rank-chart-xlabel {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 600;
+  fill: var(--text-faint);
+  letter-spacing: var(--tracking-wide);
+}
+
+.rank-chart-line {
+  fill: none;
+  stroke: var(--cyan-bright);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rank-chart-dot {
+  fill: var(--cyan-bright);
+}
+
+.rank-chart-dot.is-c {
+  fill: var(--gold-bright);
+  stroke: var(--bg-deep);
+  stroke-width: 1.5;
+}
+
+/* --- P4P row gets an extra fame column ----------------- */
+.goat-row.p4p-row {
+  grid-template-columns: 36px 22px 1fr auto auto auto auto;
+  gap: 12px;
+}
+
+.p4p-fame {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-stat);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold);
 }

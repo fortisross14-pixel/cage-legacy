@@ -199,6 +199,7 @@ export function handleTitleResult({
       );
       if (currentReign) {
         currentReign.defenses = champ.titleDefenses;
+        currentReign.lastDefenseMainEvent = state.mainEventCount;
         currentReign.fights.push({
           eventNum: eventInfo.num,
           oppName: fullName(challenger),
@@ -248,6 +249,7 @@ function crownChampion(
     startEventName: eventInfo.name,
     startAge: fighter.age,
     defenses: 0,
+    lastDefenseMainEvent: state.mainEventCount,
     endEvent: null,
     endEventName: null,
     lostTo: null,

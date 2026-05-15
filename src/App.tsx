@@ -34,7 +34,7 @@ const TABS: TabConfig[] = [
   { id: 'archive',  label: 'Archive',          icon: 'archive' },
   { id: 'rankings', label: 'Rankings',         icon: 'rankings' },
   { id: 'history',  label: 'Title History',    icon: 'history' },
-  { id: 'records',  label: 'All-Time Records', icon: 'records' },
+  { id: 'records',  label: 'All-Time', icon: 'records' },
   { id: 'roster',   label: 'Roster',           icon: 'roster' },
 ];
 
