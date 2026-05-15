@@ -24,68 +24,85 @@ import { chance, randInt } from './random';
  *
  * Skill (overall) is intentionally NOT used. A new signing — even a legend —
  * starts with no fame, no record, and no career points, so they sit at the
- * bottom of the rankings (often unranked) until they prove themselves.
+ * very bottom of the rankings until they prove themselves.
  *
- * Components (additive):
- *   - Career points (P4P score): accumulated rating-of-wins minus loss penalty.
- *   - Win/loss record: ratio and volume.
- *   - Recent streak: bonus for hot streaks, penalty for cold.
- *   - Title status: large bonus for champion, smaller for past reigns/defenses.
- *   - Fame: secondary contribution.
- *   - Inactivity penalty.
+ * Shape of the formula:
  *
- * Untested fighters (< 3 career fights) are penalized so they appear in
- * "unranked" rather than at the top of the division.
+ *   1. Record is the DOMINANT signal. A winless fighter (0-N) scores deep
+ *      negative — they belong below everyone who has won at least once.
+ *   2. Each win is worth more than the penalty per loss, but losses still
+ *      hurt enough that a sub-50% record costs you visible rank.
+ *   3. Win-rate is layered on top of raw W-L so a 3-1 ranks above a 3-3.
+ *   4. Quality of wins (careerPoints, opponent fame) is a meaningful modifier
+ *      but cannot lift a losing record into contender tiers on its own.
+ *   5. Streaks matter — a 3-fight win streak is real momentum, even on a
+ *      fighter who was previously 1-3. Losing streaks bite back.
+ *   6. Title status sits on top — champions and former champions still rank.
  */
 export function calculateRankingScore(fighter: Fighter, allFighters: Fighter[]): number {
   if (fighter.retired) return -9999;
 
-  let score = 0;
   const totalFights = fighter.wins + fighter.losses;
 
-  // ─── Untested fighters: heavy penalty ───
-  // Need ≥3 fights to register on the rankings at all. This means a brand-new
-  // signing with 0-0 lands well below ranked fighters, regardless of skill.
-  if (totalFights < 3) {
-    score -= 200;
-    // Still scale slightly by P4P/fame in case a vet was signed mid-career with priors
-    score += fighter.careerPoints * 2;
-    score += fighter.fame / 4;
-    return score;
+  // ─── Untested fighters: a new signing, sits at the very bottom. ───
+  if (totalFights === 0) {
+    return -500 + fighter.fame / 4;
   }
 
-  // ─── Career points (P4P) — primary signal ───
-  // Each rated win sums into careerPoints. Higher quality + frequency = higher rank.
-  score += fighter.careerPoints * 3.5;
+  // ─── Winless fighters (0-N, N >= 1): hard floor that worsens per loss. ───
+  // No careerPoints can save them; they have to win at least once to climb.
+  if (fighter.wins === 0) {
+    return -300 - fighter.losses * 30 + fighter.fame / 4;
+  }
 
-  // ─── Record ratio + volume ───
+  let score = 0;
+
+  // ─── Record is the dominant component ───
+  // Each win is worth +30, each loss costs -18 (so a .500 record drifts down
+  // slowly, a 2:1 winrate drifts up steadily, a winless drops sharply).
+  score += fighter.wins * 30;
+  score -= fighter.losses * 18;
+
+  // Win-rate bonus on top — separates 3-1 from 3-3 cleanly.
   const winRate = fighter.wins / totalFights;
-  // win rate 0.5 = neutral, 1.0 = +80, 0.0 = -80
-  score += (winRate - 0.5) * 160;
-  // Volume bonus: deeper careers get credit (cap at 40)
-  score += Math.min(40, totalFights * 1.2);
+  score += winRate * 80;
 
-  // ─── Recent momentum ───
-  if (fighter.currentStreak > 0) score += Math.min(50, fighter.currentStreak * 7);
-  if (fighter.currentStreak < 0) score += Math.max(-35, fighter.currentStreak * 6);
+  // ─── Streak momentum ───
+  // Win streaks lift you fast; even a comeback from 1-3 with a 3-fight streak
+  // gets a real bump. Losing streaks cap at -50 so they don't bury a vet who
+  // had one bad year on top of a long career.
+  if (fighter.currentStreak > 0) {
+    score += Math.min(60, fighter.currentStreak * 12);
+  } else if (fighter.currentStreak < 0) {
+    score += Math.max(-50, fighter.currentStreak * 10);
+  }
 
-  // ─── Title status ───
-  if (fighter.isChampion) score += 80;
-  score += fighter.titleDefenses * 10;
-  score += fighter.titleReigns * 14;
+  // ─── Quality of wins (careerPoints) ───
+  // careerPoints is a running tally of fight ratings from wins. Beating
+  // higher-rated opponents adds more. Capped contribution so a 14-1 stat-
+  // padder can't outrank a 9-2 fighter who only beat top contenders by
+  // an absurd margin — but the gap is still meaningful.
+  score += fighter.careerPoints * 2;
 
-  // ─── Inactivity decay ───
-  score -= fighter.inactive * 6;
-
-  // ─── Quality of last 10 wins (by opponent fame, NOT skill) ───
+  // ─── Recent quality wins (opponent fame) ───
+  // A fighter who beat the champ recently should outrank a fighter who
+  // racked up wins on prospects. Counted across last 10 wins.
   const recentWins = fighter.fightLog.slice(-10).filter((l) => l.result === 'W');
   for (const win of recentWins) {
     const opp = allFighters.find((f) => f.id === win.oppId);
     if (opp) score += Math.min(15, opp.fame / 8);
   }
 
-  // ─── Fame contribution ───
-  score += fighter.fame / 3;
+  // ─── Title status ───
+  if (fighter.isChampion) score += 100;
+  score += fighter.titleDefenses * 12;
+  score += fighter.titleReigns * 16;
+
+  // ─── Inactivity decay ───
+  score -= fighter.inactive * 5;
+
+  // ─── Fame contribution (secondary) ───
+  score += fighter.fame / 4;
 
   return score;
 }
