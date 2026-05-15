@@ -6,6 +6,8 @@ import type {
   EventKind,
   GameState,
   PreparedEvent,
+  RankChange,
+  RankLabel,
 } from '@/types';
 import {
   CADENCE,
@@ -13,7 +15,8 @@ import {
   DIVISION_KEYS,
   DIVISIONS,
   EVENT_PREFIXES_MAIN,
-  EVENT_PREFIXES_ALT,
+  EVENT_PREFIXES_NORMAL,
+  EVENT_PREFIXES_PROSPECT,
 } from '@/data';
 import { ageFighter, evaluateHallOfFame, fullName, generateFighter } from './fighter';
 import { applyResult, applyPostFightEffects, simulateFight } from './fight';
@@ -21,6 +24,7 @@ import {
   buildEventArchiveEntry,
   buildEventCard,
   getChampion,
+  getRankLabel,
   handleChampionRetirements,
   handleTitleResult,
 } from './rankings';
@@ -32,6 +36,7 @@ import {
   rollRosterTickEvents,
 } from './randomEvents';
 import { EVENTS_PER_YEAR, runYearEndTurnover } from './yearEnd';
+import { nextSlotAfter, slotForEventNum } from './schedule';
 import { pick, randInt } from './random';
 
 const ROSTER_PER_DIVISION = 24;
@@ -42,10 +47,16 @@ const AGE_EVERY_N_EVENTS = 8;
 // preview→reveal UX. `runEvent` calls both back-to-back.
 // ============================================================
 
-/** What kind is the *next* event going to be, based on the rotation pattern? */
-function nextEventKind(state: GameState): EventKind {
-  const idx = state.eventCount % CADENCE.KIND_PATTERN.length;
-  return CADENCE.KIND_PATTERN[idx];
+/**
+ * Compute the next event's kind + date by walking the real calendar.
+ * Looks at the last archived event's date (or anchor if none).
+ */
+function nextEventSlot(state: GameState): { date: Date; kind: EventKind } {
+  const lastDate =
+    state.eventArchive.length > 0
+      ? new Date(state.eventArchive[state.eventArchive.length - 1].date)
+      : new Date(2024, 11, 31); // Day before Jan 1 2025
+  return nextSlotAfter(lastDate);
 }
 
 /**
@@ -56,8 +67,8 @@ function nextEventKind(state: GameState): EventKind {
  * returned is what will be executed.
  */
 export function prepareNextEvent(state: GameState): PreparedEvent {
-  // Determine kind BEFORE we bump eventCount (so we look at the current rotation).
-  const kind = nextEventKind(state);
+  const slot = nextEventSlot(state);
+  const kind = slot.kind;
 
   state.eventCount++;
   const num = state.eventCount;
@@ -69,10 +80,14 @@ export function prepareNextEvent(state: GameState): PreparedEvent {
     state.mainEventCount++;
     kindNum = state.mainEventCount;
     name = `CL ${kindNum}: ${pick(EVENT_PREFIXES_MAIN)}`;
+  } else if (kind === 'normal') {
+    state.normalEventCount++;
+    kindNum = state.normalEventCount;
+    name = `Cage Night ${kindNum}: ${pick(EVENT_PREFIXES_NORMAL)}`;
   } else {
-    state.alternateEventCount++;
-    kindNum = state.alternateEventCount;
-    name = `Cage Night ${kindNum}: ${pick(EVENT_PREFIXES_ALT)}`;
+    state.prospectEventCount++;
+    kindNum = state.prospectEventCount;
+    name = `Prospect Series ${kindNum}: ${pick(EVENT_PREFIXES_PROSPECT)}`;
   }
 
   // Injury countdown at start of event
@@ -81,12 +96,21 @@ export function prepareNextEvent(state: GameState): PreparedEvent {
   }
 
   const city = pick(CITIES);
-  const date = computeDate(num);
+  const date = slot.date.toISOString();
 
   const card = buildEventCard(state, { kind });
   rollPreEventInjury(state, card, num);
 
-  return { num, kindNum, kind, name, city, date, card };
+  // Capture pre-fight ranks for everyone on the card
+  const preRanks: Record<string, RankLabel> = {};
+  for (const cf of card) {
+    const fA = state.fighters.find((f) => f.id === cf.fAId);
+    const fB = state.fighters.find((f) => f.id === cf.fBId);
+    if (fA) preRanks[fA.id] = getRankLabel(state, fA);
+    if (fB) preRanks[fB.id] = getRankLabel(state, fB);
+  }
+
+  return { num, kindNum, kind, name, city, date, card, preRanks };
 }
 
 /**
@@ -191,11 +215,26 @@ export function executeEvent(state: GameState, prepared: PreparedEvent): EventDa
 
   replenishRoster(state);
 
-  const archiveEntry = buildEventArchiveEntry(state, num, kindNum, kind, name, city, date, fights, headline);
+  // Compute rank changes for everyone who fought
+  const rankChanges: Record<string, RankChange> = {};
+  for (const fight of fights) {
+    const fAAfter = getRankLabel(state, fight.fA);
+    const fBAfter = getRankLabel(state, fight.fB);
+    rankChanges[fight.fA.id] = {
+      before: prepared.preRanks[fight.fA.id] ?? null,
+      after: fAAfter,
+    };
+    rankChanges[fight.fB.id] = {
+      before: prepared.preRanks[fight.fB.id] ?? null,
+      after: fBAfter,
+    };
+  }
+
+  const archiveEntry = buildEventArchiveEntry(state, num, kindNum, kind, name, city, date, fights, headline, prepared.preRanks);
   state.eventArchive.push(archiveEntry);
   if (state.eventArchive.length > 500) state.eventArchive.shift();
 
-  const eventData: EventData = { num, kindNum, kind, name, city, date, fights, headline };
+  const eventData: EventData = { num, kindNum, kind, name, city, date, fights, headline, rankChanges };
   state.lastEvent = eventData;
   return eventData;
 }
@@ -252,13 +291,12 @@ function replenishRoster(state: GameState): void {
 }
 
 // ============================================================
-// DATE
+// DATE (deprecated — use schedule.ts directly; kept for legacy callers)
 // ============================================================
 
+/** @deprecated Use slotForEventNum from schedule.ts. Retained for the Calendar projection. */
 export function computeDate(eventNum: number): string {
-  const date = new Date(2025, 0, 1);
-  date.setDate(date.getDate() + eventNum * CADENCE.DAYS_BETWEEN_EVENTS);
-  return date.toISOString();
+  return slotForEventNum(eventNum).date.toISOString();
 }
 
 // ============================================================

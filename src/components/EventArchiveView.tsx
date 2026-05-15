@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { ArchivedFight, EventArchiveEntry, GameState } from '@/types';
+import type { ArchivedFight, EventArchiveEntry, EventKind, GameState } from '@/types';
 import { DIVISIONS } from '@/data';
 import { Icon } from '@/icons';
 import { METHOD_LABELS, METHOD_ICONS } from './methodLabels';
@@ -9,18 +9,41 @@ interface Props {
   onFighterClick: (id: string) => void;
 }
 
+type Filter = 'visible' | 'main' | 'normal' | 'prospect' | 'all';
+
 export function EventArchiveView({ state, onFighterClick }: Props) {
-  const events = useMemo(
+  const [filter, setFilter] = useState<Filter>('visible');
+
+  const allEvents = useMemo(
     () => [...state.eventArchive].sort((a, b) => b.num - a.num),
     [state.eventArchive]
   );
+
+  const events = useMemo(() => {
+    if (filter === 'visible') return allEvents.filter((e) => e.kind !== 'prospect');
+    if (filter === 'all') return allEvents;
+    return allEvents.filter((e) => e.kind === filter);
+  }, [allEvents, filter]);
+
   const [selectedNum, setSelectedNum] = useState<number | null>(
     events.length > 0 ? events[0].num : null
   );
 
-  const selected = useMemo(
-    () => events.find((e) => e.num === selectedNum) ?? null,
-    [events, selectedNum]
+  // If the current selection isn't in the filtered list, fall back to first
+  const effectiveSelected = useMemo(() => {
+    if (selectedNum !== null && events.some((e) => e.num === selectedNum)) {
+      return events.find((e) => e.num === selectedNum) ?? null;
+    }
+    return events[0] ?? null;
+  }, [events, selectedNum]);
+
+  const counts = useMemo(
+    () => ({
+      main: allEvents.filter((e) => e.kind === 'main').length,
+      normal: allEvents.filter((e) => e.kind === 'normal').length,
+      prospect: allEvents.filter((e) => e.kind === 'prospect').length,
+    }),
+    [allEvents]
   );
 
   return (
@@ -29,6 +52,33 @@ export function EventArchiveView({ state, onFighterClick }: Props) {
         <Icon name="archive" size={18} style={{ color: 'var(--gold)' }} />
         <h2>Event Archive</h2>
         <div className="accent-line" />
+      </div>
+
+      <div className="archive-filter sub-tabs">
+        <button
+          className={`sub-tab ${filter === 'visible' ? 'active' : ''}`}
+          onClick={() => setFilter('visible')}
+        >
+          Main + Cage Nights ({counts.main + counts.normal})
+        </button>
+        <button
+          className={`sub-tab ${filter === 'main' ? 'active' : ''}`}
+          onClick={() => setFilter('main')}
+        >
+          Main only ({counts.main})
+        </button>
+        <button
+          className={`sub-tab ${filter === 'normal' ? 'active' : ''}`}
+          onClick={() => setFilter('normal')}
+        >
+          Cage Nights ({counts.normal})
+        </button>
+        <button
+          className={`sub-tab ${filter === 'prospect' ? 'active' : ''}`}
+          onClick={() => setFilter('prospect')}
+        >
+          Prospect Series ({counts.prospect})
+        </button>
       </div>
 
       {events.length === 0 ? (
@@ -46,11 +96,11 @@ export function EventArchiveView({ state, onFighterClick }: Props) {
             {events.map((e) => (
               <button
                 key={e.num}
-                className={`archive-row ${selectedNum === e.num ? 'active' : ''} kind-${e.kind}`}
+                className={`archive-row ${effectiveSelected?.num === e.num ? 'active' : ''} kind-${e.kind}`}
                 onClick={() => setSelectedNum(e.num)}
               >
                 <div className={`archive-row-kind kind-${e.kind}`}>
-                  {e.kind === 'main' ? `CL ${e.kindNum}` : `CN ${e.kindNum}`}
+                  {e.kind === 'main' ? `CL ${e.kindNum}` : e.kind === 'normal' ? `CN ${e.kindNum}` : `PR ${e.kindNum}`}
                 </div>
                 <div className="archive-row-info">
                   <div className="archive-row-name">{e.name}</div>
@@ -78,8 +128,8 @@ export function EventArchiveView({ state, onFighterClick }: Props) {
 
           {/* Right: detail */}
           <div className="archive-detail">
-            {selected ? (
-              <ArchiveDetail entry={selected} onFighterClick={onFighterClick} />
+            {effectiveSelected ? (
+              <ArchiveDetail entry={effectiveSelected} onFighterClick={onFighterClick} />
             ) : (
               <div className="empty-state inline">Select an event to view its card.</div>
             )}

@@ -11,7 +11,8 @@ function createNewGame(): GameState {
   const state: GameState = {
     eventCount: 0,
     mainEventCount: 0,
-    alternateEventCount: 0,
+    normalEventCount: 0,
+    prospectEventCount: 0,
     divisionLastFightEvent: {},
     fighters: [],
     titleHistory: [],
@@ -51,10 +52,23 @@ export function useGameState(slotId: string) {
     saveSlotGameState(slotId, state);
   }, [slotId, state]);
 
-  /** Step 1: build the card. Mutates state. Returns prepared event for preview. */
+  /**
+   * Step 1: build the card for the next user-visible event.
+   *
+   * Any prospect events that come up first get auto-simmed silently — they
+   * happen on the calendar and the results land in the archive, but the user
+   * never sees a preview/reveal for them.
+   *
+   * Returns the prepared event the user should preview (main or normal).
+   */
   const prepareEvent = useCallback((): PreparedEvent => {
     const next: GameState = JSON.parse(JSON.stringify(state));
-    const prepared = engPrepare(next);
+    let prepared = engPrepare(next);
+    // Auto-sim any prospect events that come up before a visible event
+    while (prepared.kind === 'prospect') {
+      engExecute(next, prepared);
+      prepared = engPrepare(next);
+    }
     setState(next);
     return prepared;
   }, [state]);
@@ -73,10 +87,18 @@ export function useGameState(slotId: string) {
     [state]
   );
 
-  /** Convenience: prepare + execute back-to-back (one-step sim). */
+  /**
+   * Convenience: prepare + execute back-to-back (one-step sim).
+   * Auto-sims any prospect events on the way to a user-visible event,
+   * then runs the visible event.
+   */
   const simulateEvent = useCallback((): EventData | null => {
     const next: GameState = JSON.parse(JSON.stringify(state));
-    const prepared = engPrepare(next);
+    let prepared = engPrepare(next);
+    while (prepared.kind === 'prospect') {
+      engExecute(next, prepared);
+      prepared = engPrepare(next);
+    }
     const result = engExecute(next, prepared);
     setState(next);
     return result;

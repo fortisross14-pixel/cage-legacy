@@ -216,13 +216,30 @@ export interface ArchivedFight {
   isMainEvent: boolean;
   division: Division;
   priorMeetings: number;
+  /** Ranks captured at the moment the card was built (pre-fight). */
+  fARankBefore: string | null;  // "C", "1".."N", or null if unranked
+  fBRankBefore: string | null;
 }
 
-export type EventKind = 'main' | 'alternate';
+/**
+ * Event kinds:
+ *   main     — once a month, headlines, 2 title fights + 5-6 contender fights (top 5)
+ *   normal   — weekly weekend cards, mid-rank fights (typically ranks 5-12)
+ *   prospect — mid-week (1st + 3rd Wed), bottom-half ranks (14+); auto-sim, archive-only
+ */
+export type EventKind = 'main' | 'normal' | 'prospect';
+
+/** A fighter's rank at one point in time. Used by reveal UI to show rank changes. */
+export type RankLabel = string | null;  // "C" | "1".."N" | null (unranked)
+
+export interface RankChange {
+  before: RankLabel;
+  after: RankLabel;
+}
 
 export interface EventData {
   num: number;
-  /** Marquee number (CL #) for main events, alternate number (CN #) for alternates. */
+  /** Per-kind sequence number (CL N for main, CN N for normal, PR N for prospect). */
   kindNum: number;
   kind: EventKind;
   name: string;
@@ -230,6 +247,11 @@ export interface EventData {
   date: string;
   fights: EventFight[];
   headline: string | null;
+  /**
+   * Rank changes by fighter id, captured between pre-event and post-event.
+   * Populated during executeEvent. Used by the reveal modal.
+   */
+  rankChanges: Record<string, RankChange>;
 }
 
 /**
@@ -245,6 +267,8 @@ export interface PreparedEvent {
   city: string;
   date: string;
   card: CardFight[];     // resolved matchups (after any injury swaps)
+  /** Pre-fight rank snapshot for everyone on the card. */
+  preRanks: Record<string, RankLabel>;
 }
 
 // ============================================================
@@ -310,8 +334,10 @@ export interface GameState {
   eventCount: number;
   /** Count of main (CL) events specifically. */
   mainEventCount: number;
-  /** Count of alternate (Cage Night) events specifically. */
-  alternateEventCount: number;
+  /** Count of normal (CN) events. */
+  normalEventCount: number;
+  /** Count of prospect (PR) events. */
+  prospectEventCount: number;
   /** Per-division: event count at last time a fight from this division ran. */
   divisionLastFightEvent: Partial<Record<Division, number>>;
   fighters: Fighter[];

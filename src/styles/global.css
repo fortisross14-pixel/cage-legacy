@@ -3385,3 +3385,162 @@ main {
     display: none;
   }
 }
+
+/* ============================================================
+ * ITERATION 6 — EVENT KINDS (3), RANK CHANGES, ARCHIVE FILTER
+ * ============================================================ */
+
+/* --- EVENT PAGE KIND EYEBROW + TINT ----------------------- */
+.event-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: var(--tracking-widest);
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 3px;
+  margin-bottom: 8px;
+  width: fit-content;
+}
+
+.event-eyebrow.kind-main {
+  background: rgba(212, 175, 55, 0.18);
+  color: var(--gold-bright);
+  border: 1px solid rgba(212, 175, 55, 0.45);
+}
+
+.event-eyebrow.kind-normal {
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--cyan-bright);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+}
+
+.event-eyebrow.kind-prospect {
+  background: rgba(168, 85, 247, 0.1);
+  color: var(--purple);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+/* Subtle page-level tint when the loaded event is a main */
+.event-page.kind-main .event-header {
+  background: linear-gradient(180deg, rgba(212, 175, 55, 0.06) 0%, transparent 100%);
+  border-radius: var(--r-md);
+  padding: 8px;
+  margin: -8px -8px 8px -8px;
+}
+
+/* --- REVEAL MODAL KIND TINT ------------------------------- */
+.reveal-header.kind-main {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.12) 0%, rgba(212, 175, 55, 0.03) 100%);
+  border-bottom-color: rgba(212, 175, 55, 0.35);
+}
+
+.reveal-header.kind-normal {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.06) 0%, transparent 100%);
+}
+
+.reveal-eyebrow.kind-main { color: var(--gold-bright); }
+.reveal-eyebrow.kind-normal { color: var(--cyan-bright); }
+.reveal-eyebrow.kind-prospect { color: var(--purple); }
+
+.reveal-eyebrow-kind {
+  margin-left: 6px;
+  opacity: 0.75;
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+}
+
+/* --- RANK CHANGE CHIP ------------------------------------- */
+.rank-change-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-stat);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  margin-top: 3px;
+  letter-spacing: var(--tracking-tight);
+}
+
+.rank-change-chip.rank-up {
+  color: var(--green);
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.rank-change-chip.rank-down {
+  color: var(--red-bright);
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.rank-change-chip.rank-same {
+  opacity: 0.5;
+}
+
+.rank-change-arrow {
+  font-size: 9px;
+  line-height: 1;
+}
+
+.rank-change-before {
+  opacity: 0.7;
+}
+
+/* Right-side fighter: chip should align right */
+.frc-fighter.right .rank-change-chip {
+  align-self: flex-end;
+}
+
+/* --- PROSPECT KIND COLORS (calendar + archive) ------------ */
+.calendar-event.kind-prospect {
+  background: rgba(168, 85, 247, 0.1);
+  border-color: rgba(168, 85, 247, 0.3);
+  color: var(--purple);
+}
+
+.calendar-event.kind-prospect:hover:not(:disabled) {
+  background: rgba(168, 85, 247, 0.16);
+}
+
+.calendar-legend-dot.kind-prospect {
+  background: rgba(168, 85, 247, 0.16);
+  border-color: rgba(168, 85, 247, 0.4);
+}
+
+/* Rename: calendar previously used kind-alt for normal */
+.calendar-event.kind-normal {
+  background: rgba(34, 211, 238, 0.1);
+  border-color: rgba(34, 211, 238, 0.3);
+  color: var(--cyan-bright);
+}
+
+.calendar-event.kind-normal:hover:not(:disabled) {
+  background: rgba(34, 211, 238, 0.18);
+}
+
+/* Archive row kind pill for prospect */
+.archive-row-kind.kind-prospect {
+  background: rgba(168, 85, 247, 0.1);
+  color: var(--purple);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.archive-row-kind.kind-normal {
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--cyan-bright);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+}
+
+/* --- ARCHIVE FILTER TABS ---------------------------------- */
+.archive-filter {
+  margin-bottom: 14px;
+}

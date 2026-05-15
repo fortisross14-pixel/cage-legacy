@@ -7,9 +7,8 @@
  */
 import { useMemo, useState } from 'react';
 import type { EventArchiveEntry, EventKind, GameState } from '@/types';
-import { CADENCE } from '@/data';
 import { Icon } from '@/icons';
-import { computeDate } from '@/sim/event';
+import { nextSlotAfter } from '@/sim/schedule';
 
 interface Props {
   state: GameState;
@@ -42,36 +41,45 @@ export function CalendarView({ state, onArchiveClick }: Props) {
       titleFightCount: e.titleFightCount,
     }));
 
-    // Project upcoming events using the rotation pattern
+    // Project upcoming events using the real schedule generator
     const upcoming: CalendarEvent[] = [];
     let upcomingMain = state.mainEventCount;
-    let upcomingAlt = state.alternateEventCount;
+    let upcomingNormal = state.normalEventCount;
+    let upcomingProspect = state.prospectEventCount;
+    let cursorDate =
+      state.eventArchive.length > 0
+        ? new Date(state.eventArchive[state.eventArchive.length - 1].date)
+        : new Date(2024, 11, 31);
     for (let i = 1; i <= UPCOMING_PROJECTION; i++) {
+      const slot = nextSlotAfter(cursorDate);
+      cursorDate = slot.date;
       const num = state.eventCount + i;
-      const rotationIdx = (state.eventCount + i - 1) % CADENCE.KIND_PATTERN.length;
-      const kind: EventKind = CADENCE.KIND_PATTERN[rotationIdx];
       let label: string;
       let kindNum: number;
-      if (kind === 'main') {
+      if (slot.kind === 'main') {
         upcomingMain++;
         kindNum = upcomingMain;
         label = `CL ${upcomingMain}`;
+      } else if (slot.kind === 'normal') {
+        upcomingNormal++;
+        kindNum = upcomingNormal;
+        label = `Cage Night ${upcomingNormal}`;
       } else {
-        upcomingAlt++;
-        kindNum = upcomingAlt;
-        label = `Cage Night ${upcomingAlt}`;
+        upcomingProspect++;
+        kindNum = upcomingProspect;
+        label = `PR ${upcomingProspect}`;
       }
       upcoming.push({
         num,
         kindNum,
-        kind,
+        kind: slot.kind,
         name: label,
-        date: new Date(computeDate(num)),
+        date: new Date(slot.date),
         past: false,
       });
     }
     return [...past, ...upcoming];
-  }, [state.eventArchive, state.eventCount, state.mainEventCount, state.alternateEventCount]);
+  }, [state.eventArchive, state.eventCount, state.mainEventCount, state.normalEventCount, state.prospectEventCount]);
 
   // Default month: where the most recent event is, or current real date.
   const initialMonth = useMemo(() => {
@@ -207,14 +215,24 @@ function CalendarCell({
           const classes = ['calendar-event'];
           if (isPast) classes.push('past');
           else classes.push('upcoming');
-          if (isMain) classes.push('kind-main');
-          else classes.push('kind-alt');
+          if (e.kind === 'main') classes.push('kind-main');
+          else if (e.kind === 'normal') classes.push('kind-normal');
+          else classes.push('kind-prospect');
           if (hasTitle) classes.push('has-title');
-          const shortLabel = isMain ? `CL ${e.kindNum}` : `CN ${e.kindNum}`;
+          const shortLabel =
+            e.kind === 'main'
+              ? `CL ${e.kindNum}`
+              : e.kind === 'normal'
+                ? `CN ${e.kindNum}`
+                : `PR ${e.kindNum}`;
           const titleAttr =
             e.name +
             (e.topRating ? ` — top fight ${e.topRating.toFixed(2)}` : '') +
-            (isMain ? '' : ' (no title fights)');
+            (e.kind === 'main'
+              ? ''
+              : e.kind === 'normal'
+                ? ' (no title fights)'
+                : ' (prospect event, archive-only)');
           return (
             <button
               key={e.num}

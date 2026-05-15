@@ -28,8 +28,14 @@ export function applyFameChanges({
 }: ApplyFameChangesInput): void {
   // -------- WINNER --------
   let winnerDelta = FAME.WIN_BASE;
-  if (result.method === 'KO' || result.method === 'SUB' || result.method === 'DOC') {
+  const isFinish = result.method === 'KO' || result.method === 'SUB' || result.method === 'DOC';
+  if (isFinish) {
     winnerDelta += FAME.WIN_FINISH_BONUS;
+  }
+  // Quick finish — KO or SUB in round 1 or 2 — stacks with the finish bonus.
+  // Doctor stoppages don't count as "quick" in the highlight-reel sense.
+  if ((result.method === 'KO' || result.method === 'SUB') && result.round <= 2) {
+    winnerDelta += FAME.WIN_QUICK_FINISH_BONUS;
   }
   if (isMainEvent) {
     winnerDelta += FAME.WIN_MAIN_EVENT_BONUS;

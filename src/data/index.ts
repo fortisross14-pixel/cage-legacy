@@ -87,15 +87,23 @@ export const EVENT_PREFIXES_MAIN: string[] = [
   'Fury', 'Reckoning', 'Onslaught', 'Uprising', 'Legacy',
 ];
 
-/** Shorter, less marquee names for alternate-event cards (no titles). */
-export const EVENT_PREFIXES_ALT: string[] = [
-  'Contender Series', 'Prospect Night', 'Cage Nights', 'Iron Hour',
-  'Open Cage', 'Steel Series', 'Round Up', 'Mid-Card Mayhem',
-  'Path of Pain', 'Cold Steel', 'Sparring Wars', 'Octagon Live',
+/** Normal weekend cards — no titles, mid-rank fights. */
+export const EVENT_PREFIXES_NORMAL: string[] = [
+  'Fight Night', 'Open Cage', 'Steel Series', 'Cage Nights',
+  'Iron Hour', 'Path of Pain', 'Contender Series', 'Cold Steel',
+  'Octagon Live', 'Cage Classic', 'Inferno', 'Eclipse', 'Pulse',
+];
+
+/** Prospect events — mid-week, bottom-half rank fights. */
+export const EVENT_PREFIXES_PROSPECT: string[] = [
+  'Prospect Series', 'Future Fights', 'Rising Stars', 'Underground',
+  'Hopefuls', 'New Blood', 'Trial Series', 'Step Up',
 ];
 
 /** Legacy alias for backwards compatibility (used by old prepare path). */
 export const EVENT_PREFIXES = EVENT_PREFIXES_MAIN;
+/** Legacy alias: previously called "alternate", now "normal". */
+export const EVENT_PREFIXES_ALT = EVENT_PREFIXES_NORMAL;
 
 export const CITIES: string[] = [
   'Las Vegas', 'New York', 'Rio de Janeiro', 'Tokyo', 'London', 'Sydney', 'Toronto',
@@ -234,12 +242,12 @@ export const RATING = {
   COMPETITIVENESS_GAP_AT_FULL: 25,   // 25+ overall diff = no bonus
 
   // Drama by method/round (set per FightMethod + condition)
-  DRAMA_KO_EARLY: 0.9,    // R1 KO
-  DRAMA_KO_MID:   0.6,    // R2-3 KO
-  DRAMA_KO_LATE:  0.8,    // R4-5 KO
-  DRAMA_SUB_EARLY: 0.9,
-  DRAMA_SUB_MID:   0.7,
-  DRAMA_SUB_LATE:  0.8,
+  DRAMA_KO_EARLY: 1.2,    // R1 KO — highlight-reel
+  DRAMA_KO_MID:   0.7,    // R2-3 KO
+  DRAMA_KO_LATE:  0.85,   // R4-5 KO
+  DRAMA_SUB_EARLY: 1.2,
+  DRAMA_SUB_MID:   0.8,
+  DRAMA_SUB_LATE:  0.9,
   DRAMA_DOC:       0.2,
   DRAMA_DEC_5R:    0.5,   // championship-rounds decision
   DRAMA_DEC_3R:    0.1,
@@ -269,6 +277,7 @@ export const RATING = {
 export const FAME = {
   WIN_BASE:                 1,
   WIN_FINISH_BONUS:         2,   // additional for KO/SUB
+  WIN_QUICK_FINISH_BONUS:   3,   // additional if KO/SUB in round 1 or 2 (stacks)
   WIN_MAIN_EVENT_BONUS:     3,
   WIN_TITLE_NEW:            8,   // claimed title
   WIN_TITLE_DEFENSE:        5,
@@ -369,26 +378,51 @@ export const RANDOM_EVENTS = {
 export const NEWS_FEED_CAP = 300;
 
 /**
- * Event cadence — how often events run, what kinds, and how aggressively to
- * force divisions on cards when they go without fights.
+ * Event matchmaking — fight counts and rank bands per event kind.
+ *
+ * Schedule (when events happen) lives in sim/schedule.ts.
+ * This block controls WHO fights on each kind of card.
  */
 export const CADENCE = {
-  /** Days between consecutive events. ~10 days = ~3 events/month. */
-  DAYS_BETWEEN_EVENTS: 10,
-
-  /** Sequence of event kinds, cycled. Pattern: main, alt, alt, main, alt, alt, ... */
-  KIND_PATTERN: ['main', 'alternate', 'alternate'] as const,
-
+  // ───────── MAIN EVENT ─────────
+  /** Always book the marquee title fight. */
+  MAIN_INCLUDE_TITLE: true,
+  /** Probability the main event has a SECOND title fight. */
+  MAIN_SECOND_TITLE_CHANCE: 0.85,
+  /** Total target fight count for a main card. */
+  MAIN_FIGHT_TARGET: 6,
   /**
-   * Max number of events a division can go without a fight before the
-   * matchmaker is FORCED to include it. With ~3 events/month this is ~2 months.
+   * Contender fights on a main card pull from rank #3 down (the #1 title
+   * challenger and #2 are reserved — they fight on the title cards or wait).
+   * This caps top-2 fighters to mostly title fights, protecting them from
+   * over-exposure on the undercard.
    */
-  DIVISION_MAX_GAP_EVENTS: 6,
+  MAIN_CONTENDER_RANK_MIN: 3,
+  MAIN_CONTENDER_RANK_MAX: 8,
 
-  /** Probability the main event has a second title fight (when champs available). */
-  MAIN_SECOND_TITLE_CHANCE: 0.30,
+  // ───────── NORMAL EVENT ─────────
+  /** Total target fight count for a normal weekend card. */
+  NORMAL_FIGHT_TARGET: 4,
+  /** Normal events pull from this rank range. Stretches only downward (to 13-14). */
+  NORMAL_RANK_MIN: 5,
+  NORMAL_RANK_MAX: 12,
+  /** Probability of stretching a fight to include rank 13-14 (downward only). */
+  NORMAL_STRETCH_CHANCE: 0.25,
 
-  /** Target fight count per kind. */
-  MAIN_FIGHT_TARGET: 8,         // 4 divisions × 2 fights
-  ALTERNATE_FIGHT_TARGET: 5,    // smaller card, no titles
+  // ───────── PROSPECT EVENT ─────────
+  /** Total target fight count for a prospect card — these are the grind events. */
+  PROSPECT_FIGHT_TARGET: 12,
+  /** Prospect events pull from rank 13+. */
+  PROSPECT_RANK_MIN: 13,
+  /** Auto-sim prospect events without showing them to the user. */
+  PROSPECT_AUTO_SIM: true,
+
+  // ───────── COOLDOWN TUNING ─────────
+  /** Standard "fought recently" cooldown for normal/main contender bookings. */
+  CONTENDER_COOLDOWN_EVENTS: 6,
+  /** Shorter cooldown for prospects — they need fights to climb. */
+  PROSPECT_COOLDOWN_EVENTS: 2,
 } as const;
+
+/** Legacy alias for code paths still referencing the alt target. */
+export const ALTERNATE_FIGHT_TARGET_LEGACY = CADENCE.NORMAL_FIGHT_TARGET;

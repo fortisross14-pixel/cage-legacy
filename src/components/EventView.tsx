@@ -14,10 +14,26 @@ interface Props {
 }
 
 export function EventView({ eventData, state, onSimulate, onFighterClick }: Props) {
+  const kind = eventData?.kind ?? null;
+  const kindLabel =
+    kind === 'main'
+      ? 'Main Event'
+      : kind === 'normal'
+        ? 'Cage Night'
+        : kind === 'prospect'
+          ? 'Prospect Series'
+          : '';
+
   return (
-    <div>
+    <div className={kind ? `event-page kind-${kind}` : 'event-page'}>
       <div className="event-header">
         <div className="event-title-block">
+          {kind && (
+            <div className={`event-eyebrow kind-${kind}`}>
+              {kind === 'main' && <Icon name="trophy" size={11} />}
+              {kindLabel}
+            </div>
+          )}
           <h2>{eventData ? eventData.name : 'Welcome to Cage Legacy'}</h2>
           {eventData ? (
             <div className="event-sub">
@@ -25,7 +41,7 @@ export function EventView({ eventData, state, onSimulate, onFighterClick }: Prop
               <span>{eventData.city}</span>
               <span className="sub-divider" />
               <Icon name="fight" size={14} />
-              <span>{eventData.fights.length} fights across 4 divisions</span>
+              <span>{eventData.fights.length} fights{kind === 'main' && eventData.fights.some(f => f.isTitleFight) ? ', includes title fight' : ''}</span>
             </div>
           ) : (
             <div className="event-sub">

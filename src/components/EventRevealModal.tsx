@@ -145,10 +145,13 @@ export function EventRevealModal({ prepared, fighterMap, state, onExecute, onClo
   return (
     <div className="reveal-overlay">
       <div className="reveal-modal" data-phase={phase}>
-        <div className="reveal-header">
+        <div className={`reveal-header kind-${prepared.kind}`}>
           <div>
-            <div className="reveal-eyebrow">
+            <div className={`reveal-eyebrow kind-${prepared.kind}`}>
               {phase === 'preview' ? 'Up Next' : phase === 'reveal' ? 'Live Results' : 'Event Results'}
+              <span className="reveal-eyebrow-kind">
+                {prepared.kind === 'main' ? '· Main Event' : '· Cage Night'}
+              </span>
             </div>
             <h2 className="reveal-title">{prepared.name}</h2>
             <div className="reveal-meta">
@@ -196,6 +199,7 @@ export function EventRevealModal({ prepared, fighterMap, state, onExecute, onClo
                     state={state}
                     revealed={isRevealed}
                     current={isCurrent}
+                    rankChanges={eventData?.rankChanges}
                   />
                 );
               })}
@@ -224,7 +228,14 @@ export function EventRevealModal({ prepared, fighterMap, state, onExecute, onClo
             )}
             <div className="fight-list">
               {revealFights.map((f, i) => (
-                <RevealFightRow key={i} fight={f} state={state} revealed={true} current={false} />
+                <RevealFightRow
+                  key={i}
+                  fight={f}
+                  state={state}
+                  revealed={true}
+                  current={false}
+                  rankChanges={eventData.rankChanges}
+                />
               ))}
             </div>
             <div className="reveal-actions">
@@ -326,11 +337,13 @@ function RevealFightRow({
   state,
   revealed,
   current,
+  rankChanges,
 }: {
   fight: EventFight;
   state: GameState;
   revealed: boolean;
   current: boolean;
+  rankChanges?: Record<string, { before: string | null; after: string | null }>;
 }) {
   const fAIsWinner = fight.result.winnerId === fight.fA.id;
   const classes = ['fight-row-compact', 'reveal-row'];
@@ -401,6 +414,9 @@ function RevealFightRow({
             )}
           </div>
           <div className="frc-fighter-record">{recordStr(fight.fA)}</div>
+          {revealed && rankChanges?.[fight.fA.id] && (
+            <RankChangeChip change={rankChanges[fight.fA.id]} />
+          )}
         </div>
         <div className="frc-mid">
           {revealed ? (
@@ -429,6 +445,9 @@ function RevealFightRow({
             )}
           </div>
           <div className="frc-fighter-record">{recordStr(fight.fB)}</div>
+          {revealed && rankChanges?.[fight.fB.id] && (
+            <RankChangeChip change={rankChanges[fight.fB.id]} />
+          )}
         </div>
       </div>
     </div>
@@ -441,4 +460,44 @@ function ratingTier(r: number): string {
   if (r >= 7.0) return 'strong';
   if (r >= 5.0) return 'good';
   return 'normal';
+}
+
+/**
+ * Renders a "rank 12 → 8" indicator with up/down arrow.
+ * Hidden if both before and after are null (truly unranked, no change).
+ * If after === before, shows a neutral "no change" indicator.
+ */
+function RankChangeChip({
+  change,
+}: {
+  change: { before: string | null; after: string | null };
+}) {
+  const { before, after } = change;
+  if (!before && !after) return null;
+
+  // Convert to comparable numbers (C = 0, "1".."N" = number, null = 99)
+  const num = (r: string | null): number => {
+    if (r === null) return 99;
+    if (r === 'C') return 0;
+    return parseInt(r, 10) || 99;
+  };
+  const nBefore = num(before);
+  const nAfter = num(after);
+
+  // Lower number = better rank. So if nAfter < nBefore the fighter went UP.
+  const improved = nAfter < nBefore;
+  const declined = nAfter > nBefore;
+
+  const display = (r: string | null) => (r === null ? 'UR' : r === 'C' ? 'C' : `#${r}`);
+
+  const cls = improved ? 'rank-up' : declined ? 'rank-down' : 'rank-same';
+  const arrow = improved ? '▲' : declined ? '▼' : '·';
+
+  return (
+    <div className={`rank-change-chip ${cls}`}>
+      <span className="rank-change-before">{display(before)}</span>
+      <span className="rank-change-arrow">{arrow}</span>
+      <span className="rank-change-after">{display(after)}</span>
+    </div>
+  );
 }

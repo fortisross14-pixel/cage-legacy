@@ -7,10 +7,11 @@ import type {
   Fighter,
   FightOutcome,
   GameState,
+  RankLabel,
   TitleReign,
 } from '@/types';
 import { CADENCE, DIVISION_KEYS, MATCHMAKING } from '@/data';
-import { fullName, overall } from './fighter';
+import { fullName } from './fighter';
 import { priorMeetingsCount } from './rivalry';
 import { chance, randInt } from './random';
 
@@ -19,56 +20,72 @@ import { chance, randInt } from './random';
 // ============================================================
 
 /**
- * Ranking score — overall skill is the dominant signal, with results and
- * recent momentum as modifiers. Title status and quality wins compound on top.
+ * Ranking score — you earn your rank in the cage, not at the gym.
  *
- * The math is intentionally weighted so a 15-3 veteran with overall 88 will
- * outrank a 4-0 newcomer with overall 72. A 2-2 fighter cannot title-shot.
+ * Skill (overall) is intentionally NOT used. A new signing — even a legend —
+ * starts with no fame, no record, and no career points, so they sit at the
+ * bottom of the rankings (often unranked) until they prove themselves.
+ *
+ * Components (additive):
+ *   - Career points (P4P score): accumulated rating-of-wins minus loss penalty.
+ *   - Win/loss record: ratio and volume.
+ *   - Recent streak: bonus for hot streaks, penalty for cold.
+ *   - Title status: large bonus for champion, smaller for past reigns/defenses.
+ *   - Fame: secondary contribution.
+ *   - Inactivity penalty.
+ *
+ * Untested fighters (< 3 career fights) are penalized so they appear in
+ * "unranked" rather than at the top of the division.
  */
 export function calculateRankingScore(fighter: Fighter, allFighters: Fighter[]): number {
   if (fighter.retired) return -9999;
 
-  const o = overall(fighter); // 0-99
   let score = 0;
-
-  // Skill base: overall skill is the floor of where this fighter ranks.
-  // An 85-overall fighter starts at 85*4 = 340; a 65-overall starts at 260.
-  score += o * 4;
-
-  // Win/loss ratio modifier (career record matters but is dampened):
   const totalFights = fighter.wins + fighter.losses;
-  if (totalFights >= 3) {
-    const winRate = fighter.wins / totalFights;
-    // win rate 0.5 = neutral, 1.0 = +60, 0.0 = -60
-    score += (winRate - 0.5) * 120;
-    // Volume bonus: deeper careers get small credit (cap at 25)
-    score += Math.min(25, totalFights * 0.8);
-  } else {
-    // Penalty for tiny sample sizes: untested fighters can't leapfrog veterans
-    score -= 40;
+
+  // ─── Untested fighters: heavy penalty ───
+  // Need ≥3 fights to register on the rankings at all. This means a brand-new
+  // signing with 0-0 lands well below ranked fighters, regardless of skill.
+  if (totalFights < 3) {
+    score -= 200;
+    // Still scale slightly by P4P/fame in case a vet was signed mid-career with priors
+    score += fighter.careerPoints * 2;
+    score += fighter.fame / 4;
+    return score;
   }
 
-  // Recent momentum
-  if (fighter.currentStreak > 0) score += Math.min(40, fighter.currentStreak * 6);
-  if (fighter.currentStreak < 0) score += Math.max(-30, fighter.currentStreak * 5);
+  // ─── Career points (P4P) — primary signal ───
+  // Each rated win sums into careerPoints. Higher quality + frequency = higher rank.
+  score += fighter.careerPoints * 3.5;
 
-  // Title weight
-  if (fighter.isChampion) score += 60;
-  score += fighter.titleDefenses * 8;
-  score += fighter.titleReigns * 12;
+  // ─── Record ratio + volume ───
+  const winRate = fighter.wins / totalFights;
+  // win rate 0.5 = neutral, 1.0 = +80, 0.0 = -80
+  score += (winRate - 0.5) * 160;
+  // Volume bonus: deeper careers get credit (cap at 40)
+  score += Math.min(40, totalFights * 1.2);
 
-  // Inactivity decay (subtle)
+  // ─── Recent momentum ───
+  if (fighter.currentStreak > 0) score += Math.min(50, fighter.currentStreak * 7);
+  if (fighter.currentStreak < 0) score += Math.max(-35, fighter.currentStreak * 6);
+
+  // ─── Title status ───
+  if (fighter.isChampion) score += 80;
+  score += fighter.titleDefenses * 10;
+  score += fighter.titleReigns * 14;
+
+  // ─── Inactivity decay ───
   score -= fighter.inactive * 6;
 
-  // Quality of last-10 wins: caps how much beating-up-on-cans helps
+  // ─── Quality of last 10 wins (by opponent fame, NOT skill) ───
   const recentWins = fighter.fightLog.slice(-10).filter((l) => l.result === 'W');
   for (const win of recentWins) {
     const opp = allFighters.find((f) => f.id === win.oppId);
-    if (opp) score += Math.max(0, (overall(opp) - 70) / 2.5);
+    if (opp) score += Math.min(15, opp.fame / 8);
   }
 
-  // Fame contribution — being a known commodity matters
-  score += fighter.fame / 4;
+  // ─── Fame contribution ───
+  score += fighter.fame / 3;
 
   return score;
 }
@@ -114,13 +131,15 @@ export function getTop10(state: GameState, division: Division): Fighter[] {
 
 /**
  * Returns the rank label for a fighter in their division:
- *   "C"     — current champion
- *   "1".."N" — ranked challenger (1 = top contender)
- *   null    — outside the top 15 / unranked
+ *   "C"      — current champion
+ *   "1".."N" — ranked challenger; #1 is the top contender, N is the bottom
+ *   null     — only for retired fighters (active fighters always have a rank)
  *
- * The displayed top contenders cap at 15 to keep the UI badge meaningful.
+ * Every active fighter in the division is ranked — no "unranked" tier.
+ * A brand-new signing with no record sits at the very bottom of the ladder
+ * and climbs by winning fights.
  */
-export function getRankLabel(state: GameState, fighter: Fighter, maxRanked = 15): string | null {
+export function getRankLabel(state: GameState, fighter: Fighter, maxRanked = 25): string | null {
   if (fighter.retired) return null;
   if (fighter.isChampion) return 'C';
   const ranked = getDivisionRankings(state, fighter.division);
@@ -261,113 +280,38 @@ export interface BuildCardOptions {
   kind: EventKind;
 }
 
+/**
+ * Build a fight card for the given event kind.
+ *
+ * Each kind has its own matchmaking rules:
+ *
+ *   MAIN  — Champion vs #1 contender (always, marquee division).
+ *           85% chance of a second title fight in another division.
+ *           5-6 contender fights drawn from ranks #2-#7 across divisions.
+ *           Champions ONLY fight here.
+ *
+ *   NORMAL — No champions, no title fights.
+ *            ~6 fights from ranks #5-#12 across divisions.
+ *            Sometimes a fight stretches to include #3-#4 or #13-#14.
+ *
+ *   PROSPECT — Bottom-half ranks (#13+). ~10 fights.
+ *              Auto-simmed without UI by default.
+ */
 export function buildEventCard(
   state: GameState,
-  opts: BuildCardOptions = { kind: 'main' }
+  opts: BuildCardOptions = { kind: 'normal' }
 ): CardFight[] {
   const { kind } = opts;
-  const isMainEventKind = kind === 'main';
-
   const card: CardFight[] = [];
   const used = new Set<string>();
   const eventNum = state.eventCount + 1;
 
-  // Identify divisions overdue: been more than DIVISION_MAX_GAP_EVENTS without a fight.
-  const overdueDivisions = new Set<Division>();
-  for (const div of DIVISION_KEYS) {
-    const last = state.divisionLastFightEvent[div] ?? 0;
-    if (eventNum - last >= CADENCE.DIVISION_MAX_GAP_EVENTS) overdueDivisions.add(div);
-  }
-
-  // ──────────────────────────────────────────────────────────────
-  // MAIN EVENT cards: title fights + one main event slot + undercard.
-  // ALTERNATE cards: no titles, no main event flag; pick fights across
-  // divisions weighting toward overdue ones.
-  // ──────────────────────────────────────────────────────────────
-  if (isMainEventKind) {
-    // Pick the main division (its title fight headlines the card).
-    const mainDivision = chooseMainDivision(state, eventNum);
-
-    // Possibly book a second title fight in another division.
-    const secondTitleDivision = pickSecondTitleDivision(state, mainDivision);
-
-    for (const division of DIVISION_KEYS) {
-      const isThisMainDiv = division === mainDivision;
-      const isThisSecondTitleDiv = secondTitleDivision === division;
-      const wantTitleHere = isThisMainDiv || isThisSecondTitleDiv;
-
-      let mainEventBuilt = false;
-      if (wantTitleHere) {
-        const champ = getChampion(state, division);
-        const eligibleContenders = getDivisionRankings(state, division).filter(
-          (f) => (!champ || f.id !== champ.id) && isTitleShotEligible(f)
-        );
-
-        if (champ && !isUnavailable(champ)) {
-          // Champion is available — find a contender (prefer eligible, fall back to top by score)
-          const recentChampOpps = new Set(champ.fightLog.slice(-3).map((l) => l.oppId));
-          let contender = eligibleContenders.find((f) => !recentChampOpps.has(f.id))
-            ?? eligibleContenders[0];
-          if (!contender) {
-            // No eligible contender — relax to top non-injured non-recent
-            const all = getDivisionRankings(state, division).filter(
-              (f) => f.id !== champ.id && !isUnavailable(f) && !recentChampOpps.has(f.id)
-            );
-            contender = all[0];
-          }
-          if (contender) {
-            card.push(makeCardFight(state, champ, contender, true, isThisMainDiv, division));
-            used.add(champ.id);
-            used.add(contender.id);
-            mainEventBuilt = true;
-          }
-        } else if (!champ) {
-          // Vacant belt — prefer top 2 eligible, fall back to top 2 by score
-          let a = eligibleContenders[0];
-          let b = eligibleContenders[1];
-          if (!a || !b) {
-            const all = getDivisionRankings(state, division).filter((f) => !isUnavailable(f));
-            a = a ?? all[0];
-            b = b ?? all.find((f) => f.id !== a?.id) ?? all[1];
-          }
-          if (a && b && a.id !== b.id) {
-            card.push(makeCardFight(state, a, b, true, isThisMainDiv, division));
-            used.add(a.id);
-            used.add(b.id);
-            mainEventBuilt = true;
-          }
-        }
-      }
-
-      // Undercard for this division: 2 fights total per division on main cards
-      const undercardTarget = 2 - (mainEventBuilt ? 1 : 0);
-      addUndercardFights(state, division, undercardTarget, card, used, eventNum, false);
-    }
+  if (kind === 'main') {
+    buildMainCard(state, card, used, eventNum);
+  } else if (kind === 'normal') {
+    buildNormalCard(state, card, used, eventNum);
   } else {
-    // ────────────── ALTERNATE EVENT ──────────────
-    // No title fights. Distribute ~5 fights across divisions weighted toward overdue.
-    // Each division gets 1 fight base; overdue divisions get priority for extras.
-    const target = CADENCE.ALTERNATE_FIGHT_TARGET;
-
-    // Order divisions: overdue first, then by event-gap descending, then default order.
-    const divisionsByPriority: Division[] = [...DIVISION_KEYS].sort((a, b) => {
-      const gapA = eventNum - (state.divisionLastFightEvent[a] ?? 0);
-      const gapB = eventNum - (state.divisionLastFightEvent[b] ?? 0);
-      return gapB - gapA;
-    });
-
-    // First pass: give each priority division 1 fight.
-    for (const division of divisionsByPriority) {
-      if (card.length >= target) break;
-      addUndercardFights(state, division, 1, card, used, eventNum, false);
-    }
-
-    // Second pass: top up with extra fights for the most overdue/active divisions.
-    let pass = 0;
-    while (card.length < target && pass < divisionsByPriority.length) {
-      addUndercardFights(state, divisionsByPriority[pass], 1, card, used, eventNum, false);
-      pass++;
-    }
+    buildProspectCard(state, card, used, eventNum);
   }
 
   // Tag inactivity (only for fighters not in this card and not injured)
@@ -380,8 +324,6 @@ export function buildEventCard(
   for (const div of divsOnCard) {
     state.divisionLastFightEvent[div] = eventNum;
   }
-  // Also: forced overdue divisions that ended up empty — log a "skipped" mark anyway?
-  // No — only mark divisions that actually fought.
 
   // Sort: main event first, then title fights, then division order
   card.sort((a, b) => {
@@ -392,140 +334,308 @@ export function buildEventCard(
     return DIVISION_KEYS.indexOf(a.division) - DIVISION_KEYS.indexOf(b.division);
   });
 
-  // Suppress unused-warning on overdueDivisions: it's currently used implicitly via
-  // the divisionsByPriority sort. Keep the variable for future explicit weighting.
-  void overdueDivisions;
-
   return card;
 }
 
-/**
- * Add up to `target` fights for `division`, respecting `used` set.
- * Marks the first added fight as main event only if `firstIsMainEvent` is true.
- */
-function addUndercardFights(
+// ============================================================
+// MAIN CARD BUILDER
+// ============================================================
+function buildMainCard(
   state: GameState,
-  division: Division,
-  target: number,
   card: CardFight[],
   used: Set<string>,
-  eventNum: number,
-  firstIsMainEvent: boolean
+  eventNum: number
 ): void {
-  if (target <= 0) return;
-  const available = state.fighters.filter(
-    (f) =>
-      !f.retired && !isUnavailable(f) && f.division === division && !used.has(f.id)
-  );
-  const scored = available.map((f) => ({
-    f,
-    score: calculateRankingScore(f, state.fighters),
-  }));
-  scored.sort((a, b) => b.score - a.score);
+  // Pick the marquee title division (rotation)
+  const mainDivision = chooseMainDivision(state, eventNum);
 
-  let added = 0;
-  while (added < target && scored.length >= 2) {
-    const top = scored.shift()!;
-    const recentOpps = new Set(top.f.fightLog.slice(-2).map((l) => l.oppId));
+  // Possibly add a second title fight
+  const secondTitleDivision = chance(CADENCE.MAIN_SECOND_TITLE_CHANCE)
+    ? pickSecondTitleDivision(state, mainDivision)
+    : null;
 
-    let oppIdx = findRematchCandidate(state, top.f, scored, recentOpps, eventNum);
-    if (oppIdx === -1) {
-      oppIdx = scored.findIndex((s) => !recentOpps.has(s.f.id));
-      if (oppIdx === -1) oppIdx = 0;
-      if (oppIdx + 1 < scored.length && chance(0.3)) {
-        oppIdx = Math.min(scored.length - 1, oppIdx + randInt(0, 2));
-      }
-    }
-    const opp = scored.splice(oppIdx, 1)[0];
+  // Book title fights first
+  bookTitleFightFor(state, mainDivision, card, used, true);
+  if (secondTitleDivision) {
+    bookTitleFightFor(state, secondTitleDivision, card, used, false);
+  }
 
-    card.push(
-      makeCardFight(
-        state,
-        top.f,
-        opp.f,
-        false,
-        firstIsMainEvent && added === 0,
-        division
-      )
+  // Now book contender fights from ranks #2-#7 across divisions
+  const target = CADENCE.MAIN_FIGHT_TARGET;
+  let attempts = 0;
+  while (card.length < target && attempts < 30) {
+    attempts++;
+    // Pick a division — prefer ones not yet on the card
+    const division = pickContenderDivision(state, card);
+    if (!division) break;
+    const added = bookContenderFightInBand(
+      state,
+      division,
+      card,
+      used,
+      eventNum,
+      CADENCE.MAIN_CONTENDER_RANK_MIN,
+      CADENCE.MAIN_CONTENDER_RANK_MAX
     );
-    used.add(top.f.id);
-    used.add(opp.f.id);
-    added++;
+    if (!added) {
+      // This division ran out of contender pairs — try another
+      continue;
+    }
   }
 }
 
-/**
- * 30% chance another division also gets a title fight on a main card,
- * provided its champion is available.
- */
+/** Book one title fight in the given division. Returns true on success. */
+function bookTitleFightFor(
+  state: GameState,
+  division: Division,
+  card: CardFight[],
+  used: Set<string>,
+  isMainEvent: boolean
+): boolean {
+  const champ = getChampion(state, division);
+  // Champion must be available
+  if (champ && isUnavailable(champ)) return false;
+
+  if (champ) {
+    // Find contender #1 (top of division excluding champ)
+    const contenders = getDivisionRankings(state, division).filter(
+      (f) => f.id !== champ.id && !isUnavailable(f) && !used.has(f.id)
+    );
+    if (contenders.length === 0) return false;
+    const recent = new Set(champ.fightLog.slice(-3).map((l) => l.oppId));
+    // Prefer #1 contender if they're not a too-recent opponent
+    let contender = contenders.find((f) => !recent.has(f.id)) ?? contenders[0];
+    // Eligibility: must have a winning record + 5+ fights, otherwise fall back to next
+    const eligible = contenders.filter((f) => isTitleShotEligible(f) && !recent.has(f.id));
+    if (eligible.length > 0) contender = eligible[0];
+    card.push(makeCardFight(state, champ, contender, true, isMainEvent, division));
+    used.add(champ.id);
+    used.add(contender.id);
+    return true;
+  } else {
+    // Vacant belt: top 2 eligible by ranking
+    const available = getDivisionRankings(state, division).filter(
+      (f) => !isUnavailable(f) && !used.has(f.id)
+    );
+    if (available.length < 2) return false;
+    const eligible = available.filter(isTitleShotEligible);
+    const [a, b] = eligible.length >= 2 ? eligible.slice(0, 2) : available.slice(0, 2);
+    if (!a || !b || a.id === b.id) return false;
+    card.push(makeCardFight(state, a, b, true, isMainEvent, division));
+    used.add(a.id);
+    used.add(b.id);
+    return true;
+  }
+}
+
+/** Pick the division for a second title fight (with an available champ + contender,
+ *  OR a vacant belt with 2 available fighters). */
 function pickSecondTitleDivision(state: GameState, mainDiv: Division): Division | null {
-  if (!chance(CADENCE.MAIN_SECOND_TITLE_CHANCE)) return null;
   const others = DIVISION_KEYS.filter((d) => d !== mainDiv);
   for (const d of others.sort(() => Math.random() - 0.5)) {
     const champ = getChampion(state, d);
     if (champ && !isUnavailable(champ)) {
-      const ranked = getDivisionRankings(state, d).filter((f) => f.id !== champ.id && !isUnavailable(f));
+      const ranked = getDivisionRankings(state, d).filter(
+        (f) => f.id !== champ.id && !isUnavailable(f)
+      );
       if (ranked.length > 0) return d;
+    } else if (!champ) {
+      // Vacant belt — book it if there are 2 available fighters
+      const available = getDivisionRankings(state, d).filter((f) => !isUnavailable(f));
+      if (available.length >= 2) return d;
     }
   }
   return null;
 }
 
+/** Choose which division to draw the next contender fight from. */
+function pickContenderDivision(state: GameState, card: CardFight[]): Division | null {
+  // Prefer the division with the fewest fights on the card so far
+  const divCounts: Record<Division, number> = {} as Record<Division, number>;
+  for (const div of DIVISION_KEYS) divCounts[div] = 0;
+  for (const f of card) divCounts[f.division]++;
+  return [...DIVISION_KEYS].sort((a, b) => divCounts[a] - divCounts[b])[0] ?? null;
+}
+
 /**
- * Find a rematch/trilogy candidate in the scored pool.
- * Returns the index into `scored` if a rivalry pairing is selected, else -1.
+ * Book one fight where both fighters fall within the given rank band of their division.
+ * Champions are excluded. Returns true if a fight was booked.
  */
-function findRematchCandidate(
+function bookContenderFightInBand(
+  state: GameState,
+  division: Division,
+  card: CardFight[],
+  used: Set<string>,
+  eventNum: number,
+  rankMin: number,
+  rankMax: number
+): boolean {
+  const champ = getChampion(state, division);
+  // Get contenders ordered by ranking (excluding champ, injured, retired, already used)
+  const allRanked = getDivisionRankings(state, division).filter(
+    (f) =>
+      !f.retired &&
+      !isUnavailable(f) &&
+      (!champ || f.id !== champ.id) &&
+      !used.has(f.id)
+  );
+  // Slice the rank band: ranks are 1-indexed, allRanked[0] is rank 1
+  const minIdx = Math.max(0, rankMin - 1);
+  const maxIdx = Math.min(allRanked.length - 1, rankMax - 1);
+  const band = allRanked.slice(minIdx, maxIdx + 1);
+  if (band.length < 2) return false;
+
+  // ── Recent-fight cooldown ──
+  // Top tier fighters need rest and marquee buildup; prospects need fights.
+  // Use a longer cooldown for narrow (main/normal) bands and a short one for
+  // wide (prospect) bands.
+  const isWideBand = rankMin >= 13;
+  const COOLDOWN = isWideBand
+    ? CADENCE.PROSPECT_COOLDOWN_EVENTS
+    : CADENCE.CONTENDER_COOLDOWN_EVENTS;
+  const lastEventNumForFighter = (f: Fighter): number => {
+    if (f.fightLog.length === 0) return -999;
+    return f.fightLog[f.fightLog.length - 1].eventNum;
+  };
+  const isFresh = (f: Fighter) => eventNum - lastEventNumForFighter(f) > COOLDOWN;
+  const fresh = band.filter(isFresh);
+  // If we have at least 2 fresh, only consider fresh. Otherwise fall back to full band.
+  const pool = fresh.length >= 2 ? fresh : band;
+
+  // Pick "top" of the pool — but for prospect-style wide bands (rankMin >= 13),
+  // sample uniformly across the whole pool so deep-ranked fighters (including
+  // fresh hires sitting at the very bottom) actually get booked. For narrow
+  // bands (main/normal cards), keep the bias toward the top of the band so
+  // credibility is preserved.
+  let topIdx = 0;
+  if (isWideBand && pool.length >= 3) {
+    topIdx = randInt(0, pool.length - 1);
+  } else if (pool.length >= 3 && chance(0.5)) {
+    topIdx = randInt(0, Math.min(2, pool.length - 1));
+  }
+  const top = pool[topIdx];
+  const rest = pool.filter((_, i) => i !== topIdx);
+  const recentOpps = new Set(top.fightLog.slice(-2).map((l) => l.oppId));
+
+  let oppIdx = findRematchCandidateInList(state, top, rest, recentOpps, eventNum);
+  if (oppIdx === -1) {
+    oppIdx = rest.findIndex((f) => !recentOpps.has(f.id));
+    if (oppIdx === -1) oppIdx = 0;
+    if (oppIdx + 1 < rest.length && chance(0.4)) {
+      oppIdx = Math.min(rest.length - 1, oppIdx + randInt(1, 2));
+    }
+  }
+  const opp = rest[oppIdx];
+  if (!opp) return false;
+
+  card.push(makeCardFight(state, top, opp, false, false, division));
+  used.add(top.id);
+  used.add(opp.id);
+  return true;
+}
+
+/**
+ * Same as findRematchCandidate but works on a plain Fighter[] (the band).
+ */
+function findRematchCandidateInList(
   state: GameState,
   topFighter: Fighter,
-  scored: { f: Fighter; score: number }[],
+  pool: Fighter[],
   recentOpps: Set<string>,
   eventNum: number
 ): number {
-  // Pull all rivalries involving `topFighter` in the scored pool
   const candidates: { idx: number; weight: number; trilogy: boolean }[] = [];
-
-  for (let i = 0; i < scored.length; i++) {
-    const opp = scored[i].f;
-    if (recentOpps.has(opp.id)) continue; // never rematch the literal last fight
+  for (let i = 0; i < pool.length; i++) {
+    const opp = pool[i];
+    if (recentOpps.has(opp.id)) continue;
     const rivalry = getRivalryRaw(state, topFighter.id, opp.id);
     if (!rivalry || rivalry.meetings.length === 0) continue;
-
     const lastMeeting = rivalry.meetings[rivalry.meetings.length - 1];
     const eventsSince = eventNum - lastMeeting.eventNum;
-
-    // Cooldown / recency window
     if (eventsSince < MATCHMAKING.REMATCH_COOLDOWN_EVENTS) continue;
     if (eventsSince > MATCHMAKING.REMATCH_RECENCY_WINDOW) continue;
-
-    // Last fight must have been decent
     if (lastMeeting.rating < MATCHMAKING.REMATCH_MIN_RATING) continue;
-
-    // Compute weight: trilogy (1-1 tie) gets bigger weight
-    const isTrilogy = rivalry.meetings.length === 2 && rivalry.aWins === 1 && rivalry.bWins === 1;
+    const isTrilogy =
+      rivalry.meetings.length === 2 && rivalry.aWins === 1 && rivalry.bWins === 1;
     let weight: number = MATCHMAKING.REMATCH_BASE_CHANCE;
-
-    // Close decision in prior bumps weight
     if (lastMeeting.method === 'DEC') weight *= MATCHMAKING.REMATCH_CLOSE_MULT;
-
     if (isTrilogy) weight = MATCHMAKING.TRILOGY_CHANCE;
-
     candidates.push({ idx: i, weight, trilogy: isTrilogy });
   }
-
   if (candidates.length === 0) return -1;
-
-  // Sort: trilogies first, then by weight
   candidates.sort((a, b) => {
     if (a.trilogy && !b.trilogy) return -1;
     if (!a.trilogy && b.trilogy) return 1;
     return b.weight - a.weight;
   });
-
   const best = candidates[0];
   if (!chance(best.weight)) return -1;
   return best.idx;
 }
+
+// ============================================================
+// NORMAL CARD BUILDER
+// ============================================================
+function buildNormalCard(
+  state: GameState,
+  card: CardFight[],
+  used: Set<string>,
+  eventNum: number
+): void {
+  const target = CADENCE.NORMAL_FIGHT_TARGET;
+  let attempts = 0;
+  while (card.length < target && attempts < 30) {
+    attempts++;
+    const division = pickContenderDivision(state, card);
+    if (!division) break;
+    // Stretch the band downward only (toward 13-14). Top contenders (#3-4)
+    // are reserved for main events — they don't appear on normal cards.
+    let rankMin: number = CADENCE.NORMAL_RANK_MIN;
+    let rankMax: number = CADENCE.NORMAL_RANK_MAX;
+    if (chance(CADENCE.NORMAL_STRETCH_CHANCE)) {
+      rankMax = rankMax + 2;
+    }
+    const added = bookContenderFightInBand(
+      state,
+      division,
+      card,
+      used,
+      eventNum,
+      rankMin,
+      rankMax
+    );
+    if (!added) continue;
+  }
+}
+
+// ============================================================
+// PROSPECT CARD BUILDER
+// ============================================================
+function buildProspectCard(
+  state: GameState,
+  card: CardFight[],
+  used: Set<string>,
+  eventNum: number
+): void {
+  const target = CADENCE.PROSPECT_FIGHT_TARGET;
+  let attempts = 0;
+  while (card.length < target && attempts < 40) {
+    attempts++;
+    const division = pickContenderDivision(state, card);
+    if (!division) break;
+    const added = bookContenderFightInBand(
+      state,
+      division,
+      card,
+      used,
+      eventNum,
+      CADENCE.PROSPECT_RANK_MIN,
+      9999 // open-ended at the bottom
+    );
+    if (!added) continue;
+  }
+}
+
 
 /** Raw rivalry lookup (avoids circular import; mirrors rivalry.getRivalry). */
 function getRivalryRaw(state: GameState, idA: string, idB: string) {
@@ -560,12 +670,29 @@ function makeCardFight(
 
 function chooseMainDivision(state: GameState, eventNum: number): Division {
   const isAvailable = (f: Fighter) => !f.retired && f.injured === 0;
-  const rotation = DIVISION_KEYS[(eventNum - 1) % DIVISION_KEYS.length];
+
+  // Prefer divisions with a vacant belt — get them filled.
+  const vacantDivs = DIVISION_KEYS.filter((d) => {
+    const c = getChampion(state, d);
+    if (c) return false;
+    const r = getDivisionRankings(state, d).filter(isAvailable);
+    return r.length >= 2;
+  });
+  if (vacantDivs.length > 0) {
+    // Among vacant, rotate by mainEventCount so we don't always pick the same one
+    return vacantDivs[state.mainEventCount % vacantDivs.length];
+  }
+
+  // Otherwise, rotate among all divisions based on main-event count (not raw eventNum,
+  // which includes prospects/normals).
+  const rotation = DIVISION_KEYS[state.mainEventCount % DIVISION_KEYS.length];
   const champ = getChampion(state, rotation);
   const ranked = getDivisionRankings(state, rotation).filter(
     (f) => isAvailable(f) && (!champ || f.id !== champ.id)
   );
   if ((champ && isAvailable(champ) && ranked.length > 0) || ranked.length >= 2) return rotation;
+
+  // Last resort: fall back to any division with enough fighters
   for (const div of DIVISION_KEYS) {
     const c = getChampion(state, div);
     const r = getDivisionRankings(state, div).filter(
@@ -573,6 +700,8 @@ function chooseMainDivision(state: GameState, eventNum: number): Division {
     );
     if ((c && isAvailable(c) && r.length > 0) || r.length >= 2) return div;
   }
+  // Mark unused parameter
+  void eventNum;
   return rotation;
 }
 
@@ -589,7 +718,8 @@ export function buildEventArchiveEntry(
   city: string,
   date: string,
   fights: EventFight[],
-  headline: string | null = null
+  headline: string | null = null,
+  preRanks: Record<string, RankLabel> = {}
 ): EventArchiveEntry {
   const champions: Partial<Record<Division, string>> = {};
   for (const div of DIVISION_KEYS) {
@@ -627,6 +757,8 @@ export function buildEventArchiveEntry(
     isMainEvent: f.isMainEvent,
     division: f.division,
     priorMeetings: f.priorMeetings,
+    fARankBefore: preRanks[f.fA.id] ?? null,
+    fBRankBefore: preRanks[f.fB.id] ?? null,
   }));
 
   const titleFightCount = fights.filter((f) => f.isTitleFight).length;
