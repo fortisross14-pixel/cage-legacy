@@ -10,11 +10,10 @@ import {
   ARCHETYPE_KEYS,
   COUNTRIES,
   DIVISIONS,
-  FIRST_NAMES,
-  LAST_NAMES,
   NICKNAMES,
   RARITIES,
 } from '@/data';
+import { GENERIC_POOL, NAMES_BY_COUNTRY } from '@/data/names';
 import { chance, pick, rand, randInt, uid, weightedPick } from './random';
 
 // ============================================================
@@ -35,6 +34,11 @@ export function generateFighter(opts: GenerateOptions): Fighter {
   const country = pick(COUNTRIES);
   const division = opts.division;
   const divCfg = DIVISIONS[division];
+
+  // Country-aware name pools (fall back to generic for any unmapped code)
+  const pool = NAMES_BY_COUNTRY[country.code] ?? GENERIC_POOL;
+  const firstName = pick(pool.first);
+  const lastName = pick(pool.last);
 
   // Potential ceiling (stat cap)
   const potential = randInt(rarityCfg.ceilMin, rarityCfg.ceilMax);
@@ -72,8 +76,8 @@ export function generateFighter(opts: GenerateOptions): Fighter {
 
   return {
     id: uid('f'),
-    firstName: pick(FIRST_NAMES),
-    lastName: pick(LAST_NAMES),
+    firstName,
+    lastName,
     nickname: chance(0.75) ? pick(NICKNAMES) : null,
     country: country.name,
     countryCode: country.code,

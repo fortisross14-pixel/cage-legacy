@@ -1,6 +1,6 @@
 import type { Division, GameState } from '@/types';
-import { ARCHETYPES, DIVISIONS } from '@/data';
-import { fullName, recordStr } from '@/sim/fighter';
+import { ARCHETYPES, DIVISIONS, RARITIES } from '@/data';
+import { fullName, overall, recordStr } from '@/sim/fighter';
 import { getChampion, getTop10 } from '@/sim/rankings';
 import { Icon } from '@/icons';
 import { Flag } from './Flag';
@@ -44,6 +44,10 @@ export function RankingsView({ state, division, onFighterClick }: Props) {
               <span>Age {champ.age}</span>
               <span className="meta-divider" />
               <span>{ARCHETYPES[champ.archetype].label}</span>
+              <span className="meta-divider" />
+              <span className={`rarity-tag rarity-${champ.rarity}`}>{RARITIES[champ.rarity].label}</span>
+              <span className="meta-divider" />
+              <span className="ovr-tag">{overall(champ)} OVR</span>
               <span className="meta-divider" />
               <span className="fame-badge">
                 <Icon name="star" size={11} />
@@ -103,8 +107,13 @@ export function RankingsView({ state, division, onFighterClick }: Props) {
                 <div className="rank-name-line">
                   <Flag code={f.countryCode} size={14} title={f.country} />
                   <span className="fighter-name">{fullName(f)}</span>
+                  <span className={`rarity-tag rarity-${f.rarity}`}>{RARITIES[f.rarity].label}</span>
                 </div>
                 {f.nickname && <div className="fighter-nick">"{f.nickname}"</div>}
+              </div>
+              <div className="rank-overall" title="Overall skill">
+                <span className="rank-overall-val">{overall(f)}</span>
+                <span className="rank-overall-lbl">OVR</span>
               </div>
               <div className="rank-record">{recordStr(f)}</div>
               <div className="rank-archetype">{ARCHETYPES[f.archetype].label}</div>

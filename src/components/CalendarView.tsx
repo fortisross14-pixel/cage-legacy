@@ -6,7 +6,8 @@
  * upcoming events are projected so users can see what's on deck.
  */
 import { useMemo, useState } from 'react';
-import type { EventArchiveEntry, GameState } from '@/types';
+import type { EventArchiveEntry, EventKind, GameState } from '@/types';
+import { CADENCE } from '@/data';
 import { Icon } from '@/icons';
 import { computeDate } from '@/sim/event';
 
@@ -17,12 +18,13 @@ interface Props {
 
 interface CalendarEvent {
   num: number;
+  kindNum: number;
+  kind: EventKind;
   name: string;
   date: Date;
   past: boolean;
   topRating?: number;
   titleFightCount?: number;
-  isMain?: boolean;
 }
 
 const UPCOMING_PROJECTION = 12;
@@ -31,25 +33,45 @@ export function CalendarView({ state, onArchiveClick }: Props) {
   const events = useMemo<CalendarEvent[]>(() => {
     const past: CalendarEvent[] = state.eventArchive.map((e: EventArchiveEntry) => ({
       num: e.num,
+      kindNum: e.kindNum,
+      kind: e.kind,
       name: e.name,
       date: new Date(e.date),
       past: true,
       topRating: e.topRating,
       titleFightCount: e.titleFightCount,
     }));
-    const lastNum = state.eventCount;
+
+    // Project upcoming events using the rotation pattern
     const upcoming: CalendarEvent[] = [];
+    let upcomingMain = state.mainEventCount;
+    let upcomingAlt = state.alternateEventCount;
     for (let i = 1; i <= UPCOMING_PROJECTION; i++) {
-      const num = lastNum + i;
+      const num = state.eventCount + i;
+      const rotationIdx = (state.eventCount + i - 1) % CADENCE.KIND_PATTERN.length;
+      const kind: EventKind = CADENCE.KIND_PATTERN[rotationIdx];
+      let label: string;
+      let kindNum: number;
+      if (kind === 'main') {
+        upcomingMain++;
+        kindNum = upcomingMain;
+        label = `CL ${upcomingMain}`;
+      } else {
+        upcomingAlt++;
+        kindNum = upcomingAlt;
+        label = `Cage Night ${upcomingAlt}`;
+      }
       upcoming.push({
         num,
-        name: `CL ${num}`,
+        kindNum,
+        kind,
+        name: label,
         date: new Date(computeDate(num)),
         past: false,
       });
     }
     return [...past, ...upcoming];
-  }, [state.eventArchive, state.eventCount]);
+  }, [state.eventArchive, state.eventCount, state.mainEventCount, state.alternateEventCount]);
 
   // Default month: where the most recent event is, or current real date.
   const initialMonth = useMemo(() => {
@@ -112,10 +134,10 @@ export function CalendarView({ state, onArchiveClick }: Props) {
 
       <div className="calendar-legend">
         <span className="calendar-legend-item">
-          <span className="calendar-legend-dot past" /> Past event
+          <span className="calendar-legend-dot kind-main" /> CL (main, may include title)
         </span>
         <span className="calendar-legend-item">
-          <span className="calendar-legend-dot title" /> Title fight on card
+          <span className="calendar-legend-dot kind-alt" /> Cage Night (no titles)
         </span>
         <span className="calendar-legend-item">
           <span className="calendar-legend-dot upcoming" /> Upcoming
@@ -181,19 +203,27 @@ function CalendarCell({
         {cell.events.map((e) => {
           const isPast = e.past;
           const hasTitle = (e.titleFightCount ?? 0) > 0;
+          const isMain = e.kind === 'main';
           const classes = ['calendar-event'];
           if (isPast) classes.push('past');
           else classes.push('upcoming');
+          if (isMain) classes.push('kind-main');
+          else classes.push('kind-alt');
           if (hasTitle) classes.push('has-title');
+          const shortLabel = isMain ? `CL ${e.kindNum}` : `CN ${e.kindNum}`;
+          const titleAttr =
+            e.name +
+            (e.topRating ? ` — top fight ${e.topRating.toFixed(2)}` : '') +
+            (isMain ? '' : ' (no title fights)');
           return (
             <button
               key={e.num}
               className={classes.join(' ')}
               onClick={() => isPast && onArchiveClick(e.num)}
               disabled={!isPast}
-              title={e.name + (e.topRating ? ` — top fight ${e.topRating.toFixed(2)}` : '')}
+              title={titleAttr}
             >
-              <span className="calendar-event-num">CL {e.num}</span>
+              <span className="calendar-event-num">{shortLabel}</span>
               {hasTitle && <Icon name="champion" size={9} />}
               {e.topRating !== undefined && e.topRating >= 7.0 && (
                 <Icon name="star" size={9} />

@@ -203,6 +203,7 @@ function ActiveUniverse({
         {tab === 'event' && (
           <EventView
             eventData={state.lastEvent}
+            state={state}
             onSimulate={handleSimulate}
             onFighterClick={setProfileId}
           />
@@ -236,6 +237,7 @@ function ActiveUniverse({
         <EventRevealModal
           prepared={pendingPrep}
           fighterMap={fighterMap}
+          state={state}
           onExecute={handleRevealExecute}
           onClose={handleRevealClose}
           audioEnabled={audioEnabled}

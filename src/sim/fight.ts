@@ -32,14 +32,40 @@ export function simulateFight(
   const powerA = calculatePower(fA, fB);
   const powerB = calculatePower(fB, fA);
 
-  // Title fights slightly more predictable; non-title more variance
-  const variance = isTitleFight ? 0.16 : 0.20;
+  // Skill-gap dampener: when one fighter is clearly more skilled, variance
+  // shrinks. But we keep enough variance that even a heavy favorite can drop
+  // a fight maybe 15-20% of the time over many sims.
+  const powerRatio = Math.max(powerA, powerB) / Math.min(powerA, powerB);
+  const skillGap = Math.min(0.18, (powerRatio - 1) * 0.35); // 0..0.18
+  const baseVariance = isTitleFight ? 0.16 : 0.22;
+  const variance = Math.max(0.08, baseVariance - skillGap);
 
-  // "Off night" — keeps the universe unpredictable
+  // "Off night" — rare per-fighter dip. Lower-rarity fighters dip more often
+  // and more deeply. Legendaries almost never have an off night.
+  const offNightChance: Record<typeof fA.rarity, number> = {
+    common: 0.12,
+    uncommon: 0.10,
+    rare: 0.08,
+    epic: 0.05,
+    legendary: 0.03,
+  };
+  const offNightDepth: Record<typeof fA.rarity, [number, number]> = {
+    common: [0.6, 0.85],
+    uncommon: [0.65, 0.85],
+    rare: [0.7, 0.88],
+    epic: [0.78, 0.92],
+    legendary: [0.85, 0.95],
+  };
   let offNightA = 1.0;
   let offNightB = 1.0;
-  if (chance(0.08)) offNightA = rand(0.65, 0.85);
-  if (chance(0.08)) offNightB = rand(0.65, 0.85);
+  if (chance(offNightChance[fA.rarity])) {
+    const [lo, hi] = offNightDepth[fA.rarity];
+    offNightA = rand(lo, hi);
+  }
+  if (chance(offNightChance[fB.rarity])) {
+    const [lo, hi] = offNightDepth[fB.rarity];
+    offNightB = rand(lo, hi);
+  }
 
   const rngA = powerA * (1 + rand(-variance, variance)) * offNightA;
   const rngB = powerB * (1 + rand(-variance, variance)) * offNightB;
@@ -184,10 +210,18 @@ function checkFinish(
 
   if (!chance(finishChance)) return null;
 
+  // Method selection: archetype shapes finishes much more aggressively.
+  // We cube the bias so weights below 1.0 are suppressed harder and weights
+  // above 1.0 are emphasized. Striker (ko 1.6) stays dominant for KO; wrestler
+  // (ko 0.8) collapses to ~0.5x weight. Doctor stoppage gets a real share now.
   const bias = ARCHETYPES[attacker.archetype].finishBias;
-  const koWeight = attacker.stats.striking * bias.ko;
-  const subWeight = attacker.stats.submission * bias.sub;
-  const docWeight = 6;
+  const koMult = Math.pow(bias.ko, 2.5);
+  const subMult = Math.pow(bias.sub, 2.5);
+  // The defender's durability also gates KO: tough chins make KOs harder.
+  const koWeight = (attacker.stats.striking / 50) * koMult * (1 + (defenderDamage * 0.5));
+  const subWeight = (attacker.stats.submission / 50) * subMult;
+  // DOC weight scales with cumulative damage; only really kicks in late
+  const docWeight = 0.3 + defenderDamage * 0.8;
 
   const totalW = koWeight + subWeight + docWeight;
   const r = Math.random() * totalW;

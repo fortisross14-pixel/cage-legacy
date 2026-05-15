@@ -34,6 +34,13 @@ export interface ApplyRivalryInput {
   eventInfo: { num: number; name: string };
 }
 
+/**
+ * Minimum rating required to *initiate* a new rivalry. Forgettable fights
+ * (rating < this) won't seed a rivalry record. Once a rivalry exists, every
+ * subsequent meeting is recorded regardless of rating — they're already rivals.
+ */
+const RIVALRY_THRESHOLD = 6.5;
+
 export function applyRivalryUpdate({
   state,
   fA,
@@ -46,7 +53,12 @@ export function applyRivalryUpdate({
   const aId = fA.id < fB.id ? fA.id : fB.id;
   const bId = fA.id < fB.id ? fB.id : fA.id;
 
-  let rivalry = state.rivalries[id];
+  const existing = state.rivalries[id];
+
+  // Gate: don't create a rivalry from a forgettable first meeting.
+  if (!existing && rating < RIVALRY_THRESHOLD) return;
+
+  let rivalry = existing;
   if (!rivalry) {
     rivalry = {
       id,

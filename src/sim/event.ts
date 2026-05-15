@@ -3,10 +3,18 @@ import type {
   Division,
   EventData,
   EventFight,
+  EventKind,
   GameState,
   PreparedEvent,
 } from '@/types';
-import { CITIES, DIVISION_KEYS, DIVISIONS, EVENT_PREFIXES } from '@/data';
+import {
+  CADENCE,
+  CITIES,
+  DIVISION_KEYS,
+  DIVISIONS,
+  EVENT_PREFIXES_MAIN,
+  EVENT_PREFIXES_ALT,
+} from '@/data';
 import { ageFighter, evaluateHallOfFame, fullName, generateFighter } from './fighter';
 import { applyResult, applyPostFightEffects, simulateFight } from './fight';
 import {
@@ -23,6 +31,7 @@ import {
   rollPostFightEvents,
   rollRosterTickEvents,
 } from './randomEvents';
+import { EVENTS_PER_YEAR, runYearEndTurnover } from './yearEnd';
 import { pick, randInt } from './random';
 
 const ROSTER_PER_DIVISION = 24;
@@ -33,6 +42,12 @@ const AGE_EVERY_N_EVENTS = 8;
 // preview→reveal UX. `runEvent` calls both back-to-back.
 // ============================================================
 
+/** What kind is the *next* event going to be, based on the rotation pattern? */
+function nextEventKind(state: GameState): EventKind {
+  const idx = state.eventCount % CADENCE.KIND_PATTERN.length;
+  return CADENCE.KIND_PATTERN[idx];
+}
+
 /**
  * Prepare the next event: increment counter, tick injuries, build the card,
  * roll pre-event injuries. Returns the prepared card without running fights.
@@ -41,22 +56,37 @@ const AGE_EVERY_N_EVENTS = 8;
  * returned is what will be executed.
  */
 export function prepareNextEvent(state: GameState): PreparedEvent {
+  // Determine kind BEFORE we bump eventCount (so we look at the current rotation).
+  const kind = nextEventKind(state);
+
   state.eventCount++;
   const num = state.eventCount;
+
+  // Increment the per-kind counter and name accordingly
+  let kindNum: number;
+  let name: string;
+  if (kind === 'main') {
+    state.mainEventCount++;
+    kindNum = state.mainEventCount;
+    name = `CL ${kindNum}: ${pick(EVENT_PREFIXES_MAIN)}`;
+  } else {
+    state.alternateEventCount++;
+    kindNum = state.alternateEventCount;
+    name = `Cage Night ${kindNum}: ${pick(EVENT_PREFIXES_ALT)}`;
+  }
 
   // Injury countdown at start of event
   for (const f of state.fighters) {
     if (f.injured > 0) f.injured = Math.max(0, f.injured - 1);
   }
 
-  const name = `CL ${num}: ${pick(EVENT_PREFIXES)}`;
   const city = pick(CITIES);
   const date = computeDate(num);
 
-  const card = buildEventCard(state);
+  const card = buildEventCard(state, { kind });
   rollPreEventInjury(state, card, num);
 
-  return { num, name, city, date, card };
+  return { num, kindNum, kind, name, city, date, card };
 }
 
 /**
@@ -64,7 +94,7 @@ export function prepareNextEvent(state: GameState): PreparedEvent {
  * news / aging / archive. Returns the full EventData.
  */
 export function executeEvent(state: GameState, prepared: PreparedEvent): EventData {
-  const { num, name, city, date, card } = prepared;
+  const { num, kindNum, kind, name, city, date, card } = prepared;
   const eventInfo = { num, name };
 
   // Hydrate fights and run them
@@ -136,8 +166,9 @@ export function executeEvent(state: GameState, prepared: PreparedEvent): EventDa
 
   rollRosterTickEvents(state, num);
 
-  // Periodic aging
-  if (num % AGE_EVERY_N_EVENTS === 0) {
+  // Periodic aging (now based on main-event count, not raw event count, so
+  // fighters age at roughly the same calendar pace as before).
+  if (state.mainEventCount % AGE_EVERY_N_EVENTS === 0 && kind === 'main') {
     state.fighters.forEach((f) => {
       if (!f.retired) {
         ageFighter(f, num);
@@ -152,13 +183,19 @@ export function executeEvent(state: GameState, prepared: PreparedEvent): EventDa
     });
   }
 
+  // Year-end roster turnover: every EVENTS_PER_YEAR events, drop worst-2
+  // per division and sign a veteran + a prospect.
+  if (num > 0 && num % EVENTS_PER_YEAR === 0) {
+    runYearEndTurnover(state, num);
+  }
+
   replenishRoster(state);
 
-  const archiveEntry = buildEventArchiveEntry(state, num, name, city, date, fights, headline);
+  const archiveEntry = buildEventArchiveEntry(state, num, kindNum, kind, name, city, date, fights, headline);
   state.eventArchive.push(archiveEntry);
-  if (state.eventArchive.length > 200) state.eventArchive.shift();
+  if (state.eventArchive.length > 500) state.eventArchive.shift();
 
-  const eventData: EventData = { num, name, city, date, fights, headline };
+  const eventData: EventData = { num, kindNum, kind, name, city, date, fights, headline };
   state.lastEvent = eventData;
   return eventData;
 }
@@ -220,7 +257,7 @@ function replenishRoster(state: GameState): void {
 
 export function computeDate(eventNum: number): string {
   const date = new Date(2025, 0, 1);
-  date.setDate(date.getDate() + eventNum * 21);
+  date.setDate(date.getDate() + eventNum * CADENCE.DAYS_BETWEEN_EVENTS);
   return date.toISOString();
 }
 

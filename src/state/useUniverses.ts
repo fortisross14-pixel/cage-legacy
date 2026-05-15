@@ -13,7 +13,7 @@ import type { GameState } from '@/types';
 import { uid } from '@/sim/random';
 
 const INDEX_KEY = 'cage_legacy_universes_v1';
-const SAVE_KEY_PREFIX = 'cage_legacy_save_v4_';
+const SAVE_KEY_PREFIX = 'cage_legacy_save_v5_';
 const LEGACY_SINGLE_KEY = 'cage_legacy_save_v4';
 
 export interface UniverseMeta {
@@ -179,6 +179,9 @@ export function loadSlotGameState(id: string): GameState | null {
     if (!parsed.rivalries) parsed.rivalries = {};
     if (!parsed.bestFightsAllTime) parsed.bestFightsAllTime = [];
     if (!parsed.news) parsed.news = [];
+    if (typeof parsed.mainEventCount !== 'number') parsed.mainEventCount = parsed.eventCount;
+    if (typeof parsed.alternateEventCount !== 'number') parsed.alternateEventCount = 0;
+    if (!parsed.divisionLastFightEvent) parsed.divisionLastFightEvent = {};
     for (const f of parsed.fighters) {
       if (typeof (f as { injured?: number }).injured !== 'number') {
         (f as { injured: number }).injured = 0;

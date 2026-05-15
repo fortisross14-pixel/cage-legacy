@@ -81,11 +81,21 @@ export const COUNTRIES: Country[] = [
   { name: 'Kazakhstan', code: 'KZ' },
 ];
 
-export const EVENT_PREFIXES: string[] = [
+export const EVENT_PREFIXES_MAIN: string[] = [
   'Fight Night', 'Cage Wars', 'Championship', 'Combat Night', 'Grand Prix',
   'Showdown', 'Battleground', 'Apex', 'Mayhem', 'Domination',
   'Fury', 'Reckoning', 'Onslaught', 'Uprising', 'Legacy',
 ];
+
+/** Shorter, less marquee names for alternate-event cards (no titles). */
+export const EVENT_PREFIXES_ALT: string[] = [
+  'Contender Series', 'Prospect Night', 'Cage Nights', 'Iron Hour',
+  'Open Cage', 'Steel Series', 'Round Up', 'Mid-Card Mayhem',
+  'Path of Pain', 'Cold Steel', 'Sparring Wars', 'Octagon Live',
+];
+
+/** Legacy alias for backwards compatibility (used by old prepare path). */
+export const EVENT_PREFIXES = EVENT_PREFIXES_MAIN;
 
 export const CITIES: string[] = [
   'Las Vegas', 'New York', 'Rio de Janeiro', 'Tokyo', 'London', 'Sydney', 'Toronto',
@@ -112,18 +122,18 @@ export const RARITIES: Record<Rarity, RarityConfig> = {
 export const ARCHETYPES: Record<Archetype, ArchetypeConfig> = {
   striker: {
     label: 'Striker',
-    weights: { striking: 1.4, grappling: 0.7, submission: 0.7, cardio: 1.0, durability: 1.0, fightIQ: 1.0 },
-    finishBias: { ko: 1.6, sub: 0.4, dec: 0.9 },
+    weights: { striking: 1.6, grappling: 0.8, submission: 0.7, cardio: 1.1, durability: 1.1, fightIQ: 1.1 },
+    finishBias: { ko: 1.7, sub: 0.3, dec: 0.9 },
   },
   wrestler: {
     label: 'Wrestler',
     weights: { striking: 0.8, grappling: 1.5, submission: 1.0, cardio: 1.1, durability: 1.1, fightIQ: 1.0 },
-    finishBias: { ko: 0.8, sub: 0.9, dec: 1.3 },
+    finishBias: { ko: 0.6, sub: 0.9, dec: 1.4 },
   },
   submission: {
     label: 'Submission Specialist',
     weights: { striking: 0.8, grappling: 1.2, submission: 1.6, cardio: 1.0, durability: 0.9, fightIQ: 1.0 },
-    finishBias: { ko: 0.5, sub: 1.9, dec: 0.9 },
+    finishBias: { ko: 0.4, sub: 2.0, dec: 0.9 },
   },
   pressure: {
     label: 'Pressure Fighter',
@@ -193,11 +203,11 @@ export const DIVISION_KEYS = Object.keys(DIVISIONS) as Division[];
 // ============================================================
 
 export const MATCHUP_MATRIX: Record<Archetype, Record<Archetype, number>> = {
-  striker:    { striker: 1.0,  wrestler: 0.85, submission: 1.1, pressure: 0.95, tactical: 1.0 },
-  wrestler:   { striker: 1.15, wrestler: 1.0,  submission: 1.0, pressure: 0.95, tactical: 1.0 },
-  submission: { striker: 0.95, wrestler: 1.0,  submission: 1.0, pressure: 0.9,  tactical: 1.0 },
-  pressure:   { striker: 1.05, wrestler: 1.05, submission: 1.1, pressure: 1.0,  tactical: 1.1 },
-  tactical:   { striker: 1.0,  wrestler: 1.0,  submission: 1.0, pressure: 0.9,  tactical: 1.0 },
+  striker:    { striker: 1.0,  wrestler: 0.92, submission: 1.1,  pressure: 0.95, tactical: 1.05 },
+  wrestler:   { striker: 1.08, wrestler: 1.0,  submission: 1.05, pressure: 0.95, tactical: 0.98 },
+  submission: { striker: 0.95, wrestler: 0.95, submission: 1.0,  pressure: 0.95, tactical: 1.05 },
+  pressure:   { striker: 1.05, wrestler: 1.05, submission: 1.05, pressure: 1.0,  tactical: 1.05 },
+  tactical:   { striker: 0.95, wrestler: 1.02, submission: 0.95, pressure: 0.95, tactical: 1.0  },
 };
 
 // ============================================================
@@ -357,3 +367,28 @@ export const RANDOM_EVENTS = {
 
 /** Hard cap on news feed entries. Newest pushed to front. */
 export const NEWS_FEED_CAP = 300;
+
+/**
+ * Event cadence — how often events run, what kinds, and how aggressively to
+ * force divisions on cards when they go without fights.
+ */
+export const CADENCE = {
+  /** Days between consecutive events. ~10 days = ~3 events/month. */
+  DAYS_BETWEEN_EVENTS: 10,
+
+  /** Sequence of event kinds, cycled. Pattern: main, alt, alt, main, alt, alt, ... */
+  KIND_PATTERN: ['main', 'alternate', 'alternate'] as const,
+
+  /**
+   * Max number of events a division can go without a fight before the
+   * matchmaker is FORCED to include it. With ~3 events/month this is ~2 months.
+   */
+  DIVISION_MAX_GAP_EVENTS: 6,
+
+  /** Probability the main event has a second title fight (when champs available). */
+  MAIN_SECOND_TITLE_CHANCE: 0.30,
+
+  /** Target fight count per kind. */
+  MAIN_FIGHT_TARGET: 8,         // 4 divisions × 2 fights
+  ALTERNATE_FIGHT_TARGET: 5,    // smaller card, no titles
+} as const;

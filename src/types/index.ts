@@ -185,6 +185,8 @@ export interface EventFight {
 
 export interface EventArchiveEntry {
   num: number;
+  kindNum: number;
+  kind: EventKind;
   name: string;
   city: string;
   date: string;
@@ -216,8 +218,13 @@ export interface ArchivedFight {
   priorMeetings: number;
 }
 
+export type EventKind = 'main' | 'alternate';
+
 export interface EventData {
   num: number;
+  /** Marquee number (CL #) for main events, alternate number (CN #) for alternates. */
+  kindNum: number;
+  kind: EventKind;
   name: string;
   city: string;
   date: string;
@@ -232,6 +239,8 @@ export interface EventData {
  */
 export interface PreparedEvent {
   num: number;
+  kindNum: number;
+  kind: EventKind;
   name: string;
   city: string;
   date: string;
@@ -299,6 +308,12 @@ export interface BestFightRecord {
 
 export interface GameState {
   eventCount: number;
+  /** Count of main (CL) events specifically. */
+  mainEventCount: number;
+  /** Count of alternate (Cage Night) events specifically. */
+  alternateEventCount: number;
+  /** Per-division: event count at last time a fight from this division ran. */
+  divisionLastFightEvent: Partial<Record<Division, number>>;
   fighters: Fighter[];
   titleHistory: TitleReign[];
   eventArchive: EventArchiveEntry[];

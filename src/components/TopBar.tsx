@@ -32,7 +32,7 @@ export function TopBar({
 
   return (
     <header className="topbar">
-      <div className="brand" onClick={onHome} role="button" title="Back to home" style={{ cursor: 'pointer' }}>
+      <div className="brand">
         <div className="brand-mark">CL</div>
         <div className="brand-text">
           <div className="brand-title">CAGE LEGACY</div>
@@ -66,13 +66,13 @@ export function TopBar({
           <Icon name={audioEnabled ? 'hype' : 'close'} size={12} />
           Audio
         </button>
-        <button className="btn-toggle" onClick={onHome} title="Switch universe">
-          <Icon name="home" size={12} />
-          Home
+        <button className="btn-home" onClick={onHome} title="Save & switch universe">
+          <Icon name="home" size={14} />
+          Save & Exit
         </button>
-        <button className="btn-reset" onClick={onReset} title="Reset this universe">
+        <button className="btn-reset" onClick={onReset} title="Restart this universe from scratch">
           <Icon name="reset" size={12} />
-          Reset
+          Restart
         </button>
       </div>
     </header>

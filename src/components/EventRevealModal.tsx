@@ -13,12 +13,14 @@ import type {
   EventData,
   EventFight,
   Fighter,
+  GameState,
   PreparedEvent,
 } from '@/types';
 import { DIVISIONS } from '@/data';
 import { fullName, recordStr } from '@/sim/fighter';
 import { Icon } from '@/icons';
 import { Flag } from './Flag';
+import { RankBadge } from './RankBadge';
 import { METHOD_LABELS, METHOD_ICONS } from './methodLabels';
 import { playFightChime, playClick, playTitleSting } from '@/audio/sounds';
 
@@ -27,6 +29,7 @@ type Phase = 'preview' | 'reveal' | 'summary';
 interface Props {
   prepared: PreparedEvent;
   fighterMap: Map<string, Fighter>;
+  state: GameState;
   /** Called when the user clicks Start: caller runs executeEvent and returns EventData. */
   onExecute: () => EventData | null;
   /** Called when the modal closes (after summary, or via early dismiss). */
@@ -37,7 +40,7 @@ interface Props {
 
 const REVEAL_FIGHT_DELAY_MS = 950;   // delay before unveiling each fight result
 
-export function EventRevealModal({ prepared, fighterMap, onExecute, onClose, audioEnabled }: Props) {
+export function EventRevealModal({ prepared, fighterMap, state, onExecute, onClose, audioEnabled }: Props) {
   const [phase, setPhase] = useState<Phase>('preview');
   const [eventData, setEventData] = useState<EventData | null>(null);
   const [revealedIdx, setRevealedIdx] = useState(-1); // -1 = none revealed yet
@@ -165,7 +168,7 @@ export function EventRevealModal({ prepared, fighterMap, onExecute, onClose, aud
           <div className="reveal-body">
             <div className="fight-list">
               {sortedCard.map((cf, i) => (
-                <PreviewFightRow key={i} cardFight={cf} fighterMap={fighterMap} />
+                <PreviewFightRow key={i} cardFight={cf} fighterMap={fighterMap} state={state} />
               ))}
             </div>
             <div className="reveal-actions">
@@ -190,6 +193,7 @@ export function EventRevealModal({ prepared, fighterMap, onExecute, onClose, aud
                   <RevealFightRow
                     key={i}
                     fight={f}
+                    state={state}
                     revealed={isRevealed}
                     current={isCurrent}
                   />
@@ -220,7 +224,7 @@ export function EventRevealModal({ prepared, fighterMap, onExecute, onClose, aud
             )}
             <div className="fight-list">
               {revealFights.map((f, i) => (
-                <RevealFightRow key={i} fight={f} revealed={true} current={false} />
+                <RevealFightRow key={i} fight={f} state={state} revealed={true} current={false} />
               ))}
             </div>
             <div className="reveal-actions">
@@ -241,9 +245,11 @@ export function EventRevealModal({ prepared, fighterMap, onExecute, onClose, aud
 function PreviewFightRow({
   cardFight,
   fighterMap,
+  state,
 }: {
   cardFight: CardFight;
   fighterMap: Map<string, Fighter>;
+  state: GameState;
 }) {
   const fA = fighterMap.get(cardFight.fAId);
   const fB = fighterMap.get(cardFight.fBId);
@@ -293,6 +299,7 @@ function PreviewFightRow({
       </div>
       <div className="frc-body">
         <div className="frc-fighter left preview-side">
+          <RankBadge fighter={fA} state={state} />
           <Flag code={fA.countryCode} size={16} title={fA.country} />
           <div className="frc-fighter-name">{fullName(fA)}</div>
           <div className="frc-fighter-record">{recordStr(fA)}</div>
@@ -301,6 +308,7 @@ function PreviewFightRow({
           <div className="frc-method method-pending">VS</div>
         </div>
         <div className="frc-fighter right preview-side">
+          <RankBadge fighter={fB} state={state} />
           <Flag code={fB.countryCode} size={16} title={fB.country} />
           <div className="frc-fighter-name">{fullName(fB)}</div>
           <div className="frc-fighter-record">{recordStr(fB)}</div>
@@ -315,10 +323,12 @@ function PreviewFightRow({
 // ============================================================
 function RevealFightRow({
   fight,
+  state,
   revealed,
   current,
 }: {
   fight: EventFight;
+  state: GameState;
   revealed: boolean;
   current: boolean;
 }) {
@@ -380,6 +390,7 @@ function RevealFightRow({
         <div
           className={`frc-fighter left ${revealed ? (fAIsWinner ? 'winner' : 'loser') : 'preview-side'}`}
         >
+          <RankBadge fighter={fight.fA} state={state} />
           <Flag code={fight.fA.countryCode} size={16} title={fight.fA.country} />
           <div className="frc-fighter-name">
             {fullName(fight.fA)}
@@ -407,6 +418,7 @@ function RevealFightRow({
         <div
           className={`frc-fighter right ${revealed ? (!fAIsWinner ? 'winner' : 'loser') : 'preview-side'}`}
         >
+          <RankBadge fighter={fight.fB} state={state} />
           <Flag code={fight.fB.countryCode} size={16} title={fight.fB.country} />
           <div className="frc-fighter-name">
             {fullName(fight.fB)}

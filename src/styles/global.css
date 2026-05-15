@@ -3166,3 +3166,222 @@ main {
     font-size: 11px;
   }
 }
+
+/* ============================================================
+ * ITERATION 4 — RANK BADGES, EVENT KINDS, NAMES
+ * ============================================================ */
+
+/* --- RANK BADGE ------------------------------------------- */
+.rank-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  font-family: var(--font-stat);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+  border-radius: 3px;
+  background: var(--text-bright);
+  color: var(--bg-deep);
+  border: 1px solid var(--text-bright);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.rank-badge.champ {
+  background: var(--gold-bright);
+  color: var(--bg-deep);
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.4), 0 0 6px rgba(212, 175, 55, 0.35);
+}
+
+.rank-badge.ranked {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--bg-deep);
+}
+
+.rank-badge-md {
+  min-width: 24px;
+  height: 24px;
+  font-size: 13px;
+}
+
+/* Right-side fighter: the badge sits AFTER the name visually; flex handles order */
+.frc-fighter.right .rank-badge {
+  order: 99;
+}
+
+/* --- HOME BUTTON (top bar) -------------------------------- */
+.btn-home {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(212, 175, 55, 0.15);
+  border: 1px solid var(--gold);
+  border-radius: var(--r-md);
+  padding: 7px 14px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--gold-bright);
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease);
+}
+
+.btn-home:hover {
+  background: rgba(212, 175, 55, 0.25);
+  color: var(--text-bright);
+}
+
+/* --- CALENDAR EVENT KIND COLORS --------------------------- */
+.calendar-event.kind-main {
+  background: rgba(212, 175, 55, 0.14);
+  border-color: rgba(212, 175, 55, 0.45);
+  color: var(--gold-bright);
+}
+
+.calendar-event.kind-main:hover:not(:disabled) {
+  background: rgba(212, 175, 55, 0.22);
+  transform: translateY(-1px);
+}
+
+.calendar-event.kind-alt {
+  background: rgba(34, 211, 238, 0.1);
+  border-color: rgba(34, 211, 238, 0.3);
+  color: var(--cyan-bright);
+}
+
+.calendar-event.kind-alt:hover:not(:disabled) {
+  background: rgba(34, 211, 238, 0.18);
+  transform: translateY(-1px);
+}
+
+.calendar-event.kind-main.upcoming,
+.calendar-event.kind-alt.upcoming {
+  opacity: 0.55;
+}
+
+.calendar-event.kind-main.has-title {
+  background: rgba(212, 175, 55, 0.22);
+  border-color: var(--gold);
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.3);
+}
+
+/* Legend dots */
+.calendar-legend-dot.kind-main {
+  background: rgba(212, 175, 55, 0.22);
+  border-color: var(--gold);
+}
+
+.calendar-legend-dot.kind-alt {
+  background: rgba(34, 211, 238, 0.18);
+  border-color: rgba(34, 211, 238, 0.45);
+}
+
+/* --- ARCHIVE ROW KIND PILL -------------------------------- */
+.archive-row-kind {
+  display: grid;
+  place-items: center;
+  min-width: 48px;
+  padding: 4px 8px;
+  font-family: var(--font-stat);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+  border-radius: 3px;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 1.1;
+}
+
+.archive-row-kind.kind-main {
+  background: rgba(212, 175, 55, 0.14);
+  color: var(--gold-bright);
+  border: 1px solid rgba(212, 175, 55, 0.4);
+}
+
+.archive-row-kind.kind-alt {
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--cyan-bright);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+}
+
+/* Override the prior grid-template: the row had num column, now kind column */
+.archive-row {
+  grid-template-columns: 56px 1fr auto;
+}
+
+/* ============================================================
+ * ITERATION 5 — RANKINGS UI ADDITIONS
+ * ============================================================ */
+
+/* Override rank-row to fit overall column */
+.rank-row {
+  grid-template-columns: 60px 1fr 70px auto auto !important;
+}
+
+.rank-overall {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 64px;
+  padding: 4px 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--r-md);
+}
+
+.rank-overall-val {
+  font-family: var(--font-stat);
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-bright);
+  line-height: 1;
+  letter-spacing: var(--tracking-tight);
+}
+
+.rank-overall-lbl {
+  font-family: var(--font-body);
+  font-size: 8px;
+  font-weight: 800;
+  color: var(--text-faint);
+  letter-spacing: var(--tracking-widest);
+  text-transform: uppercase;
+}
+
+/* OVR tag for champ-meta line */
+.ovr-tag {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-stat);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-bright);
+  letter-spacing: var(--tracking-tight);
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-bright);
+}
+
+/* When a rarity-tag appears inline in rank-name-line, make it small */
+.rank-name-line .rarity-tag {
+  font-size: 9px;
+  padding: 1px 5px;
+  margin-left: 4px;
+}
+
+/* Mobile: stack overall under name */
+@media (max-width: 700px) {
+  .rank-row {
+    grid-template-columns: 50px 1fr auto !important;
+  }
+  .rank-overall {
+    display: none;
+  }
+}

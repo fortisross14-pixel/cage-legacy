@@ -46,10 +46,12 @@ export function EventArchiveView({ state, onFighterClick }: Props) {
             {events.map((e) => (
               <button
                 key={e.num}
-                className={`archive-row ${selectedNum === e.num ? 'active' : ''}`}
+                className={`archive-row ${selectedNum === e.num ? 'active' : ''} kind-${e.kind}`}
                 onClick={() => setSelectedNum(e.num)}
               >
-                <div className="archive-row-num">#{e.num}</div>
+                <div className={`archive-row-kind kind-${e.kind}`}>
+                  {e.kind === 'main' ? `CL ${e.kindNum}` : `CN ${e.kindNum}`}
+                </div>
                 <div className="archive-row-info">
                   <div className="archive-row-name">{e.name}</div>
                   <div className="archive-row-meta">

@@ -1,17 +1,19 @@
-import type { EventData, EventFight, Fighter } from '@/types';
+import type { EventData, EventFight, Fighter, GameState } from '@/types';
 import { DIVISIONS } from '@/data';
 import { fullName, recordStr } from '@/sim/fighter';
 import { Icon } from '@/icons';
 import { Flag } from './Flag';
+import { RankBadge } from './RankBadge';
 import { METHOD_LABELS, METHOD_ICONS } from './methodLabels';
 
 interface Props {
   eventData: EventData | null;
+  state: GameState;
   onSimulate: () => void;
   onFighterClick: (id: string) => void;
 }
 
-export function EventView({ eventData, onSimulate, onFighterClick }: Props) {
+export function EventView({ eventData, state, onSimulate, onFighterClick }: Props) {
   return (
     <div>
       <div className="event-header">
@@ -63,7 +65,7 @@ export function EventView({ eventData, onSimulate, onFighterClick }: Props) {
 
           <div className="fight-list">
             {eventData.fights.map((fight, idx) => (
-              <FightRow key={idx} fight={fight} onFighterClick={onFighterClick} />
+              <FightRow key={idx} fight={fight} state={state} onFighterClick={onFighterClick} />
             ))}
           </div>
         </>
@@ -75,7 +77,15 @@ export function EventView({ eventData, onSimulate, onFighterClick }: Props) {
 // ============================================================
 // COMPACT FIGHT ROW
 // ============================================================
-function FightRow({ fight, onFighterClick }: { fight: EventFight; onFighterClick: (id: string) => void }) {
+function FightRow({
+  fight,
+  state,
+  onFighterClick,
+}: {
+  fight: EventFight;
+  state: GameState;
+  onFighterClick: (id: string) => void;
+}) {
   const fAIsWinner = fight.result.winnerId === fight.fA.id;
   const classes = ['fight-row-compact'];
   if (fight.isMainEvent) classes.push('main-event');
@@ -122,7 +132,7 @@ function FightRow({ fight, onFighterClick }: { fight: EventFight; onFighterClick
       </div>
 
       <div className="frc-body">
-        <FighterSide fighter={fight.fA} isWinner={fAIsWinner} side="left" onClick={onFighterClick} />
+        <FighterSide fighter={fight.fA} state={state} isWinner={fAIsWinner} side="left" onClick={onFighterClick} />
         <div className="frc-mid">
           <div className={`frc-method method-${fight.result.method}`}>
             <Icon name={METHOD_ICONS[fight.result.method]} size={11} />
@@ -130,7 +140,7 @@ function FightRow({ fight, onFighterClick }: { fight: EventFight; onFighterClick
           </div>
           <div className="frc-duration">{fight.result.duration}</div>
         </div>
-        <FighterSide fighter={fight.fB} isWinner={!fAIsWinner} side="right" onClick={onFighterClick} />
+        <FighterSide fighter={fight.fB} state={state} isWinner={!fAIsWinner} side="right" onClick={onFighterClick} />
       </div>
     </div>
   );
@@ -138,11 +148,13 @@ function FightRow({ fight, onFighterClick }: { fight: EventFight; onFighterClick
 
 function FighterSide({
   fighter,
+  state,
   isWinner,
   side,
   onClick,
 }: {
   fighter: Fighter;
+  state: GameState;
   isWinner: boolean;
   side: 'left' | 'right';
   onClick: (id: string) => void;
@@ -152,6 +164,7 @@ function FighterSide({
       className={`frc-fighter ${side} ${isWinner ? 'winner' : 'loser'}`}
       onClick={() => onClick(fighter.id)}
     >
+      <RankBadge fighter={fighter} state={state} />
       <Flag code={fighter.countryCode} size={16} title={fighter.country} />
       <div className="frc-fighter-name">
         {fullName(fighter)}

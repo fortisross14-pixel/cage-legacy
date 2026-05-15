@@ -10,6 +10,9 @@ import { loadSlotGameState, saveSlotGameState } from './useUniverses';
 function createNewGame(): GameState {
   const state: GameState = {
     eventCount: 0,
+    mainEventCount: 0,
+    alternateEventCount: 0,
+    divisionLastFightEvent: {},
     fighters: [],
     titleHistory: [],
     eventArchive: [],
